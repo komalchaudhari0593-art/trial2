@@ -1,0 +1,661 @@
+<html><head>
+    <style>
+        #process-container {
+    position: relative;
+    border: 1px solid #000;
+        overflow: auto;
+    width: 100%;
+    height: 100vh;
+        }
+#process-container>div:focus-visible
+{outline: -webkit-focus-ring-color auto 0px;}
+
+
+
+        #sidebar {
+    width: max-content;
+    height: max-content;
+    border: 1px solid #000;
+    float: left;
+    background-color: #f0f0f0;
+    position: absolute;
+    z-index: 3;
+    top: 60px;
+        }
+
+        .item {
+            position: absolute;
+            background-color: #f0f0f0;
+            cursor: move;
+			width: 100px;
+			min-height: 100px;
+			height: fit-content;
+			z-index:2;
+        }
+
+        .line {
+            position: absolute;
+            background: #000;
+			height:1px;
+			z-index:1;
+        }
+		.mainNo,.mainYes{
+		    border: 1px solid #000;
+		}
+        div
+
+.add-button {
+	display: flex;
+    background-color: #fff;
+    border: 1px solid #d5d9d9;
+    border-radius: 8px;
+    box-shadow: rgba(213, 217, 217, .5) 0 2px 5px 0;
+    box-sizing: border-box;
+    color: #0f1111;
+    cursor: pointer;
+    font-family: "Amazon Ember", sans-serif;
+    font-size: 13px;
+    line-height: 29px;
+    text-align: center;
+    text-decoration: none;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+    vertical-align: middle;
+    width: 150px;
+    flex-direction: row;
+    align-items: center;
+    height: 50px;
+}
+
+.add-button:hover {
+  background-color: #f7fafa;
+}
+
+.add-button:focus {
+  border-color: #008296;
+  box-shadow: rgba(213, 217, 217, .5) 0 2px 5px 0;
+  outline: 0;
+}
+
+        .popup {
+            position: absolute;
+            background: #fff;
+            border: 1px solid #000;
+            padding: 10px;
+            display: none;
+        }
+		.toggleButton{
+		position: absolute;
+		left: calc(100% + 10px);
+		transform-origin: left;
+		transform: rotate(90deg);
+		width: 105px;}
+			
+			.process{
+margin: 0px 5px;
+    width: 30px;
+    height: 30px;
+    background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" preserveAspectRatio="none">><rect x="1.6" y="7.8" width="28.8" height="14.4" fill="%23f1f3f4" stroke="%23000000" stroke-width="1.3" style="pointer-events: none;"/></svg>') no-repeat center center;
+  background-size: cover;
+			}
+    
+	.terminator{
+margin: 0px 5px;
+    width: 30px;
+    height: 30px;
+  background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" preserveAspectRatio="none">><path d="M 10.38 6.3 L 21.62 6.3 C 26.53 6.3 30.5 10.2 30.5 15 C 30.5 19.8 26.53 23.7 21.62 23.7 L 10.38 23.7 C 5.47 23.7 1.5 19.8 1.5 15 C 1.5 10.2 5.47 6.3 10.38 6.3 Z" fill="%23f1f3f4" stroke="%23000000" stroke-width="1.3" stroke-miterlimit="10" style="fill: light-dark(rgb(241, 243, 244), rgb(27, 29, 30)); stroke: light-dark(rgb(0, 0, 0), rgb(192, 192, 192)); pointer-events: none;"/></svg>') no-repeat center center;
+  background-size: cover; /* Adjust as needed */
+  }
+	
+	
+	.decision {
+margin: 0px 5px;
+    width: 30px;
+    height: 30px;
+  background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" preserveAspectRatio="none">><path d="M 16 1.4 L 29.6 15 L 16 28.6 L 2.4 15 Z" fill="%23f1f3f4" stroke="%23000000" stroke-width="1.3" stroke-miterlimit="10" style="fill: light-dark(rgb(241, 243, 244), rgb(27, 29, 30)); stroke: light-dark(rgb(0, 0, 0), rgb(192, 192, 192)); pointer-events: none;"/></svg>') no-repeat center center;
+  background-size: cover; /* Adjust as needed */
+}
+
+	.document {
+margin: 0px 5px;
+    width: 30px;
+    height: 30px;
+  background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" preserveAspectRatio="none">><path d="M 1.6 5.4 L 30.4 5.4 L 30.4 21.72 Q 23.2 16.54 16 21.72 Q 8.8 26.9 1.6 21.72 L 1.6 8.28 Z" fill="%23f1f3f4" stroke="%23000000" stroke-width="1.3" stroke-miterlimit="10" style="fill: light-dark(rgb(241, 243, 244), rgb(27, 29, 30)); stroke: light-dark(rgb(0, 0, 0), rgb(192, 192, 192)); pointer-events: none;"/></svg>') no-repeat center center;
+  background-size: cover; /* Adjust as needed */
+}
+
+	.inputoutput {
+margin: 0px 5px;
+    width: 30px;
+    height: 30px;
+background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" preserveAspectRatio="none">><path d="M 1.6 22.2 L 6.4 7.8 L 30.4 7.8 L 25.6 22.2 Z" fill="%23f1f3f4" stroke="%23000000" stroke-width="1.3" stroke-miterlimit="10" style="fill: light-dark(rgb(241, 243, 244), rgb(27, 29, 30)); stroke: light-dark(rgb(0, 0, 0), rgb(192, 192, 192)); pointer-events: none;"/></svg>') no-repeat center center;
+  background-size: cover; /* Adjust as needed */
+}
+
+	.flow {
+margin: 0px 5px;
+    width: 30px;
+    height: 30px;
+  background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" preserveAspectRatio="none">><g transform="translate(0.5,0.5)" style="visibility: visible; pointer-events: none;"><path d="M 5.29 25.29 L 24.4 6.18" fill="none" stroke="white" stroke-width="9.3" stroke-miterlimit="10" style="stroke: light-dark(rgb(0, 0, 0), rgb(192, 192, 192)); pointer-events: none;" visibility="hidden"></path><path d="M 5.29 25.29 L 24.4 6.18" fill="none" stroke="%23000000" stroke-width="1.3" stroke-miterlimit="10" style="stroke: light-dark(rgb(0, 0, 0), rgb(192, 192, 192)); pointer-events: none;"></path><path d="M 25.96 4.62 L 24.92 7.74 L 24.4 6.18 L 22.84 5.66 Z" fill="%23000000" stroke="%23000000" stroke-width="1.3" stroke-miterlimit="10" style="fill: light-dark(rgb(0, 0, 0), rgb(192, 192, 192)); stroke: light-dark(rgb(0, 0, 0), rgb(192, 192, 192)); pointer-events: none;"></path></g></svg>') no-repeat center center;
+  background-size: cover; /* Adjust as needed */
+}
+	.delay {
+margin: 0px 5px;
+    width: 30px;
+    height: 30px;
+  background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" preserveAspectRatio="none">><path d="M 1.5 7.75 C 1.5 6.95 2.16 6.3 2.98 6.3 L 24.82 6.3 C 28.28 7.86 30.5 11.26 30.5 15 C 30.5 18.74 28.28 22.14 24.82 23.7 L 2.98 23.7 C 2.16 23.7 1.5 23.05 1.5 22.25 L 1.5 7.75 Z" fill="%23f1f3f4" stroke="%23000000" stroke-width="1.3" stroke-miterlimit="10" style="fill: light-dark(rgb(241, 243, 244), rgb(27, 29, 30)); stroke: light-dark(rgb(0, 0, 0), rgb(192, 192, 192)); pointer-events: none;"/></svg>') no-repeat center center;
+  background-size: cover; /* Adjust as needed */
+}
+
+
+.materialTransfer {
+margin: 0px 5px;
+    width: 30px;
+    height: 30px;
+  background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" preserveAspectRatio="none">><path d="M 1.5 10.94 L 18.9 10.94 L 18.9 4.85 L 30.5 15 L 18.9 25.15 L 18.9 19.06 L 1.5 19.06 L 1.5 15 Z" fill="%23f1f3f4" stroke="%23000000" stroke-width="1.3" stroke-miterlimit="10" style="fill: light-dark(rgb(241, 243, 244), rgb(27, 29, 30)); stroke: light-dark(rgb(0, 0, 0), rgb(192, 192, 192)); pointer-events: none;"/></svg>') no-repeat center center;
+  background-size: cover; /* Adjust as needed */
+}
+
+.mainprocess {
+  margin: 0px 5px;
+  background: url('data:image/svg+xml;utf8,<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">&gt;<g class="layer"><path fill="%23f1f3f4" stroke="%23000000" stroke-width="1.3" d="M-.03.05h31.92v31.9H-.03z" vector-effect="non-scaling-stroke"/></g></svg>') no-repeat center center;
+  background-size: 100% 100%;
+}
+
+.mainterminator {
+  margin: 0px 5px;
+
+  background: url('data:image/svg+xml;utf8,<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">&gt;<g class="layer"><path d="M9.87.05H22.2c5.39 0 9.74 7.16 9.74 15.98s-4.36 15.98-9.74 15.98H9.87c-5.39 0-9.74-7.16-9.74-15.98S4.49.05 9.87.05z" fill="%23f1f3f4" stroke="%23000000" stroke-width="1.3" vector-effect="non-scaling-stroke"/></g></svg>') no-repeat center center;
+  background-size: 100% 100%;
+}
+
+.maindecision {
+  margin: 0px 5px;
+
+  background: url('data:image/svg+xml;utf8,<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">&gt;<g class="layer"><path d="m16 .4 15.72 15.73L16 31.86.28 16.13 16 .4z" fill="%23f1f3f4" stroke="%23000000" stroke-width="1.3" vector-effect="non-scaling-stroke"/></g></svg>') no-repeat center center;
+  background-size: 100% 100%;
+}
+
+.maindocument {
+  margin: 0px 5px;
+
+  background: url('data:image/svg+xml;utf8,<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">preserveAspectRatio=&quot;none&quot;&gt;<g class="layer"><path d="M.1.02h31.86v27.54q-7.97-8.74-15.93 0-7.97 8.74-15.93 0V.02z" fill="%23f1f3f4" stroke="%23000000" stroke-width="1.3" vector-effect="non-scaling-stroke" /></g></svg>') no-repeat center center;
+  background-size: 100% 100%;
+}
+
+.maininputoutput {
+  margin: 0px 5px;
+
+  background: url('data:image/svg+xml;utf8,<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">&gt;<g class="layer"><path d="M.1 32.07 5.4-.08h26.5l-5.3 32.15H.1z" fill="%23f1f3f4" stroke="%23000000" stroke-width="1.3" vector-effect="non-scaling-stroke"/></g></svg>') no-repeat center center;
+  background-size: 100% 100%;
+}
+
+.maindelay {
+  margin: 0px 5px;
+
+  background: url('data:image/svg+xml;utf8,<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">&gt;<g class="layer"><path d="M.75 3.33c0-1.4.7-2.53 1.56-2.53h23.06c3.65 2.73 6 8.67 6 15.2 0 6.53-2.34 12.47-6 15.2H2.31c-.87 0-1.56-1.14-1.56-2.53V3.34z" fill="light-dark(rgb(241, 243, 244), rgb(27, 29, 30))" stroke="light-dark(rgb(0, 0, 0), rgb(192, 192, 192))" stroke-width="1.3" vector-effect="non-scaling-stroke"/></g></svg>') no-repeat center center;
+  background-size: 100% 100%;
+}
+
+.mainmaterialTransfer {
+  margin: 0px 5px;
+
+  background: url('data:image/svg+xml;utf8,<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">&gt;<g class="layer"><path d="M.69 10.19h18.38V1.66l12.25 14.21-12.25 14.21v-8.53H.69V10.17z" fill="light-dark(rgb(241, 243, 244), rgb(27, 29, 30))" stroke="light-dark(rgb(0, 0, 0), rgb(192, 192, 192))" stroke-width="1.3" vector-effect="non-scaling-stroke"/></g></svg>') no-repeat center center;
+  background-size: 100% 100%;
+}
+
+.mainNo.item,.mainYes.item{
+    width: 30px;
+    height: 20px;
+	min-height:20px;
+}
+
+.center{
+    align-content: center;
+    text-align: center;}
+	
+	
+	/* Add styles for the resizers */
+.resizers {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    pointer-events: none; /* To allow clicks through to the resizable element */
+}
+
+/* Individual resizers */
+.resizer {
+    width: 10px;
+    height: 10px;
+    background: #000;
+    position: absolute;
+    pointer-events: all; /* Enable pointer events on resizers */
+}
+
+/* Resizer positions */
+.resizer.top-left {
+    top: -5px;
+    left: -5px;
+    cursor: nwse-resize;
+}
+
+.resizer.top-right {
+    top: -5px;
+    right: -5px;
+    cursor: nesw-resize;
+}
+
+.resizer.bottom-left {
+    bottom: -5px;
+    left: -5px;
+    cursor: nesw-resize;
+}
+
+.resizer.bottom-right {
+    bottom: -5px;
+    right: -5px;
+    cursor: nwse-resize;
+}
+
+/* Container styles */
+#process-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+#context-menu{z-index:10000;}
+body {
+  user-select: none;
+}
+
+
+.endline::after {
+    content: '';
+    position: absolute;
+    width: 21px;
+    height: 17px;
+    top: -8px;
+	left:calc(100% - 20px);
+    background-color: #ffffff;
+  background: url('data:image/svg+xml;utf8,<svg width="10" height="10" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none"><g class="layer"><g class="layer"><path d="M9 5 .6 9.2 2.7 5 .6.8 9 5z" fill="light-dark(rgb(0, 0, 0), rgb(255, 255, 255))" class="layer" stroke="light-dark(rgb(0, 0, 0), rgb(255, 255, 255))" stroke-miterlimit="10"/></g></g></svg>') no-repeat center center;
+  background-size: 100% 100%; /* Adjust as needed */
+
+}
+
+	</style>
+	
+</head>
+
+
+<body>
+        <div id="sidebar">
+        <button class="toggleButton" onclick="toggleButtons()">Toggle Buttons</button>
+        <div id="button-container" style="display: none;">
+		            <div class="add-button" onclick="addItem('terminator')"><div class="terminator"></div><div>Start/End</div></div>
+            <div class="add-button" onclick="addItem('process')"><div class="process"></div><div>Process</div></div>
+            <div class="add-button" onclick="addItem('inputoutput')"><div class="inputoutput"></div><div>Input/Output</div></div>
+            <div class="add-button" onclick="addItem('document')"><div class="document"></div><div>Document</div></div>
+            <div class="add-button" onclick="addItem('materialTransfer')"><div class="materialTransfer"></div><div>Material Transfer</div></div>
+            <div class="add-button" onclick="addItem('delay')"><div class="delay"></div><div>Delay</div></div>
+            <div class="add-button" onclick="addItem('decision')"><div class="decision"></div><div>Decision</div></div>
+            <div class="add-button" onclick="addLink()"><div class="flow"></div><div>Direction of flow</div></div>
+            <div class="add-button" onclick="saveDiagram()"><div></div><div>Save </div></div>
+            <div class="add-button" onclick="loadDiagram()"><div></div><div>Load</div></div>
+        </div>
+    </div>
+    
+    <div id="process-container"></div><div class="popup" id="popup">
+        <button onclick="addItemBetween('process')">Process</button>
+        <button onclick="addItemBetween('inputoutput')">Input/Output</button>
+        <button onclick="addItemBetween('document')">Document</button>
+        <button onclick="addItemBetween('materialTransfer')">Material Transfer</button>
+        <button onclick="addItemBetween('delay')">Delay</button>
+        <button onclick="addItemBetween('decision')">Decision</button>
+    </div>
+
+    <script>
+let processCounter = 0;
+let selectedItems = [];
+let selectedLine = null;
+const connections = [];
+let isAddingLink = false;
+const diagramData = { items: [], connections: [] };
+
+document.addEventListener('DOMContentLoaded', () => {
+    createContextMenu();
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('#context-menu')) {
+            hideContextMenu();
+        }
+    });
+});
+
+function createContextMenu() {
+    const contextMenu = document.createElement('div');
+    contextMenu.id = 'context-menu';
+    contextMenu.style.position = 'absolute';
+    contextMenu.style.display = 'none';
+    contextMenu.style.backgroundColor = '#f0f0f0';
+    contextMenu.style.border = '1px solid #000';
+    document.body.appendChild(contextMenu);
+
+    const menuOptions = ['Process', 'Input/Output', 'Document', 'Material Transfer', 'Delay'];
+    menuOptions.forEach(option => {
+        const menuItem = document.createElement('div');
+        menuItem.innerText = option;
+        menuItem.style.padding = '5px';
+        menuItem.addEventListener('click', () => {
+            addItemBetween(option);
+            contextMenu.style.display = 'none';
+        });
+        contextMenu.appendChild(menuItem);
+    });
+}
+
+function hideContextMenu() {
+    const contextMenu = document.getElementById('context-menu');
+    contextMenu.style.display = 'none';
+    selectedLine = null; // Reset selected line when context menu is hidden
+}
+function addItem(type, x = 100, y = 100, entry = null, decisionid = null) {
+    const container = document.getElementById('process-container');
+    const newItem = document.createElement('div');
+    newItem.className = 'main' + type + ' item center';
+    newItem.style.top = `${y}px`;
+    newItem.style.left = `${x}px`;
+    newItem.innerText = type;
+    newItem.id = entry || generateUniqueId();
+    newItem.contentEditable = false; // Make item initially non-editable
+    newItem.addEventListener('dblclick', () => enableEditing(newItem));
+    newItem.addEventListener('blur', () => disableEditing(newItem));
+    newItem.addEventListener('mousedown', dragStart);
+
+    newItem.addEventListener('click', () => {
+        if (isAddingLink) handleSelectItem(newItem);
+    });
+    makeResizable(newItem); // Make the item resizable
+    container.appendChild(newItem);
+    diagramData.items.push({ id: newItem.id, type, x, y });
+
+    if (type == "Yes" || type == "No") {
+        connectItems(decisionid, newItem);
+    }
+
+    if (type == "decision") {
+        x = x + newItem.clientWidth / 2;
+        y = y + newItem.clientHeight / 2;
+        addItem("Yes", x - 50, y + 50, null, newItem);
+        addItem("No", x + 50, y + 50, null, newItem);
+    }
+}
+
+
+function updateItemData(newItem) {
+    const itemData = diagramData.items.find(d => d.id === newItem.id);
+    if (itemData) {
+        itemData.type = newItem.innerText; // Update the type with the new content
+    }
+}
+function enableEditing(item) {
+    item.contentEditable = true;
+    item.focus();
+}
+
+function disableEditing(item) {
+    item.contentEditable = false;
+    updateItemData(item);
+}
+
+	
+function handleSelectItem(newItem) {
+    newItem.style.border = selectedItems.includes(newItem) ? '1px solid #000' : '2px solid blue';
+    selectedItems = selectedItems.includes(newItem) ? selectedItems.filter(item => item !== newItem) : [...selectedItems, newItem];
+
+    if (selectedItems.length === 2) {
+        selectedItems.forEach(item => item.style.border = '');
+        connectItems(selectedItems[0], selectedItems[1]);
+        selectedItems = [];
+        isAddingLink = false;
+    }
+}
+
+function addLink() {
+    isAddingLink = true;
+}
+
+function dragStart(event) {
+    if (event.button !== 0) return; // Only allow left mouse button
+    const item = event.target;
+    const shiftX = item.classList.contains("resizer")?"0px":event.clientX - item.getBoundingClientRect().left;
+    const shiftY = item.classList.contains("resizer")?"0px":event.clientY - item.getBoundingClientRect().top;
+
+    function moveAt(pageX, pageY) {
+        const container = document.getElementById('process-container');
+        const containerRect = container.getBoundingClientRect();
+        item.style.left = `${pageX - containerRect.left - shiftX}px`;
+        item.style.top = `${pageY - containerRect.top - shiftY}px`;
+        const itemData = diagramData.items.find(d => d.id === item.id);
+        if (itemData) {
+            itemData.x = item.offsetLeft;
+            itemData.y = item.offsetTop;
+        }
+        updateLines();
+    }
+
+    function onMouseMove(event) {
+        if (event.buttons !== 1) { // Check if the left mouse button is pressed
+            stopDragging();
+            return;
+        }
+        moveAt(event.pageX, event.pageY);
+    }
+
+    function stopDragging() {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', stopDragging);
+    }
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', stopDragging);
+    item.ondragstart = () => false;
+}
+
+
+function connectItems(item1, item2) {
+    const midLine = {
+        id: generateUniqueId(),
+        from: item1.id,
+        to: item2.id,
+        draggable: false // No draggable functionality for the middle line
+    };
+    connections.push(midLine);
+    diagramData.connections.push(midLine);
+    updateLines();
+}
+
+function updateLines() {
+    const container = document.getElementById('process-container');
+    container.querySelectorAll('.line').forEach(line => container.removeChild(line));
+    connections.forEach(({ from, to, id }) => {
+        const item1 = document.getElementById(from);
+        const item2 = document.getElementById(to);
+        const startX = item1.offsetLeft + item1.offsetWidth / 2;
+        const startY = item1.offsetTop + item1.offsetHeight / 2;
+        const endX = item2.offsetLeft + item2.offsetWidth / 2;
+        const endY = item2.offsetTop + item2.offsetHeight / 2;
+
+        const distVert = Math.abs(startY - endY);
+        const distHorz = Math.abs(startX - endX);
+
+
+//for doc 37 % on top
+//for input 24% on side
+		let type="",correction;
+        if (distVert > distHorz) {
+            // Horizontal-Vertical-Horizontal combination
+            const midY = (startY + endY) / 2;			
+						if (item2.classList.contains("maindocument") && (startY > endY)){correction=0.37*item2.clientHeight} else {correction=0.5*item2.clientHeight}
+
+            createLine(container, startX, startY, startX, midY, id,from,to);
+            createLine(container, startX, midY, endX, midY, id,from,to);
+            createLine(container, endX, midY, endX, endY, id,from,to,"end",correction);
+        } else {
+            // Vertical-Horizontal-Vertical combination
+			if (item2.classList.contains("maininputoutput")){correction=0.41*item2.clientWidth}else{correction=0.5*item2.clientWidth}
+
+            const midX = (startX + endX) / 2;
+            createLine(container, startX, startY, midX, startY, id,from,to);
+            createLine(container, midX, startY, midX, endY, id,from,to);
+            createLine(container, midX, endY, endX, endY, id,from,to,"end",correction);
+        }
+    });
+}
+
+function createLine(container, startX, startY, endX, endY, id,from,to,type=null,correction=0) {
+    const length = (Math.sqrt((endX - startX) ** 2 + (endY - startY) ** 2))-correction;
+    const angle = Math.atan2(endY - startY, endX - startX) * 180 / Math.PI;
+    const line = document.createElement('div');
+	
+	
+    line.className = `line ${type=='end'?'endline':''}`;
+    line.style.width = `${length}px`;
+    line.style.transform = `rotate(${angle}deg)`;
+    line.style.left = `${startX}px`;
+    line.style.top = `${startY}px`;
+    line.style.transformOrigin = 'left';
+    line.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        selectedLine = { item1: document.getElementById(from), item2: document.getElementById(to) };
+        showContextMenu(e.pageX, e.pageY);
+    });
+    container.appendChild(line);
+}
+
+
+function showContextMenu(x, y) {
+    const contextMenu = document.getElementById('context-menu');
+    contextMenu.style.left = `${x}px`;
+    contextMenu.style.top = `${y}px`;
+    contextMenu.style.display = 'block';
+}
+
+function addItemBetween(type) {
+    const x = (parseInt(selectedLine.item1.style.left) + parseInt(selectedLine.item2.style.left)) / 2;
+    const y = (parseInt(selectedLine.item1.style.top) + parseInt(selectedLine.item2.style.top)) / 2;
+    const newItemId = generateUniqueId();
+    addItem(type, x, y, newItemId);
+
+    // Remove the existing connection
+    connections.splice(connections.findIndex(conn => conn.from === selectedLine.item1.id && conn.to === selectedLine.item2.id), 1);
+    diagramData.connections = diagramData.connections.filter(conn => !(conn.from === selectedLine.item1.id && conn.to === selectedLine.item2.id));
+
+    // Add new connections
+    connectItems(selectedLine.item1, document.getElementById(newItemId));
+    connectItems(document.getElementById(newItemId), selectedLine.item2);
+    selectedLine = null;
+    document.getElementById('popup').style.display = 'none';
+}
+
+function saveDiagram() {
+    localStorage.setItem('diagramData', JSON.stringify(diagramData));
+}
+
+function loadDiagram() {
+    const savedData = localStorage.getItem('diagramData');
+    if (savedData) {
+        const { items, connections } = JSON.parse(savedData);
+        const container = document.getElementById('process-container');
+        container.innerHTML = ""; // Clear existing items and lines
+        diagramData.items = [];
+        diagramData.connections = [];
+        items.forEach(item => {
+            addItem(item.type, parseInt(item.x), parseInt(item.y), item.id);
+        });
+        // Restore connections
+        connections.forEach(conn => {
+            const fromItem = document.getElementById(conn.from);
+            const toItem = document.getElementById(conn.to);
+            if (fromItem && toItem) {
+                connectItems(fromItem, toItem);
+            }
+        });
+        updateLines();
+    }
+}
+
+function generateUniqueId() {
+    return 'xxxx-xxxx-4xxx-yxxx-xxxxxx'.replace(/[xy]/g, function(c) {
+        var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
+
+function toggleButtons() {
+    const buttonContainer = document.getElementById('button-container');
+    buttonContainer.style.display = buttonContainer.style.display === 'none' ? 'block' : 'none';
+}
+
+
+function makeResizable(item) {
+    const resizers = document.createElement('div');
+    resizers.className = 'resizers';
+    //['top-left', 'top-right', 'bottom-left', 'bottom-right'].forEach(pos => {
+	['bottom-right'].forEach(pos => {
+        const resizer = document.createElement('div');
+        resizer.className = 'resizer ' + pos;
+        resizer.addEventListener('mousedown', initResize);
+        resizers.appendChild(resizer);
+    });
+    item.appendChild(resizers);
+}
+
+function initResize(e) {
+    e.preventDefault();
+    window.addEventListener('mousemove', resize);
+    window.addEventListener('mouseup', stopResize);
+    const item = e.target.parentElement.parentElement;
+    const resizer = e.target;
+
+    function resize(e) {
+        const rect = item.getBoundingClientRect();
+        if (resizer.classList.contains('top-left1')) {
+            item.style.width = rect.right - e.clientX + 'px';
+            item.style.height = rect.bottom - e.clientY + 'px';
+            item.style.left = e.clientX + 'px';
+            item.style.top = e.clientY + 'px';
+        } else if (resizer.classList.contains('top-right1')) {
+            item.style.width = e.clientX - rect.left + 'px';
+            item.style.height = rect.bottom - e.clientY + 'px';
+            item.style.top = e.clientY + 'px';
+        } else if (resizer.classList.contains('bottom-left1')) {
+            item.style.width = rect.right - e.clientX + 'px';
+            item.style.height = e.clientY - rect.top + 'px';
+            item.style.left = e.clientX + 'px';
+        } else {
+            item.style.width = e.clientX - rect.left + 'px';
+            item.style.height = e.clientY - rect.top + 'px';
+        }
+        updateItemSize(item);
+        updateLines();
+    }
+
+    function stopResize() {
+        window.removeEventListener('mousemove', resize);
+        window.removeEventListener('mouseup', stopResize);
+    }
+}
+
+function updateItemSize(item) {
+    const itemData = diagramData.items.find(d => d.id === item.id);
+    if (itemData) {
+        itemData.width = item.style.width;
+        itemData.height = item.style.height;
+    }
+}
+
+
+	
+    </script>

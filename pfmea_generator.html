@@ -16969,10 +16969,11 @@ This ensures that no technically credible item is discarded due to length limita
       if (typeof renderControlsLibraryTable === 'function') renderControlsLibraryTable();
     }
 
-    function removeOperationFromPackage(opId) {
+    async function removeOperationFromPackage(opId) {
       const op = (pfmeaPackageState.operations || []).find(o => o.id === opId);
       const opName = op ? (op.name || opId) : opId;
-      if (!confirm(`Remove operation "${opName}" and ALL associated data from accumulated package?`)) return;
+      const isConfirmed = await showCustomConfirm(`Remove operation "${opName}" and ALL associated data from accumulated package?`, 'Remove Operation', 'warning');
+      if (!isConfirmed) return;
 
       purgeOperationAndAllDataFromPackage(opId, op);
 
@@ -17562,10 +17563,11 @@ ${escapeHtml(p.content.slice(0, 3000))}${p.content.length > 3000 ? '\n\n... [Con
       document.getElementById('mpContent').value = '';
     }
 
-    function deleteCustomMasterPrompt(promptId) {
+    async function deleteCustomMasterPrompt(promptId) {
       const p = masterPromptLibrary.find(item => item.id === promptId);
       if (!p) return;
-      if (!confirm(`Are you sure you want to remove prompt "${p.name}"?`)) return;
+      const isConfirmed = await showCustomConfirm(`Are you sure you want to remove prompt "${p.name}"?`, 'Delete Prompt', 'warning');
+      if (!isConfirmed) return;
       masterPromptLibrary = masterPromptLibrary.filter(item => item.id !== promptId);
       if (activeMasterPromptId === promptId) {
         activeMasterPromptId = masterPromptLibrary[0]?.id || 'prompt-pfmea-aiag-vda-master';
@@ -17722,10 +17724,11 @@ ${escapeHtml(p.content.slice(0, 3000))}${p.content.length > 3000 ? '\n\n... [Con
       document.getElementById('treeNodeProcedure').value = '';
     }
 
-    function removeTreeOperation(id) {
+    async function removeTreeOperation(id) {
       const op = (processOperationsTree || []).find(o => o.id === id);
       const opName = op ? (op.name || op.opNumber || id) : id;
-      if (!confirm(`Remove operation "${opName}" and ALL its associated data from the sequence and accumulated package?`)) return;
+      const isConfirmed = await showCustomConfirm(`Remove operation "${opName}" and ALL its associated data from the sequence and accumulated package?`, 'Delete Operation', 'warning');
+      if (!isConfirmed) return;
 
       purgeOperationAndAllDataFromPackage(id, op);
 
@@ -17762,8 +17765,9 @@ ${escapeHtml(p.content.slice(0, 3000))}${p.content.length > 3000 ? '\n\n... [Con
       showToast("🗑️ Operation and all associated data removed.", "ℹ️");
     }
 
-    function clearAllTreeNodes() {
-      if (!confirm("Clear all operations in sequence and ALL accumulated package data?")) return;
+    async function clearAllTreeNodes() {
+      const isConfirmed = await showCustomConfirm("Clear all operations in sequence and ALL accumulated package data?", "Clear All Operations", "warning");
+      if (!isConfirmed) return;
       processOperationsTree = [];
       pfmeaPackageState = {
         packageMagic: "JOST_PFMEA_SUBFILE_PKG_V1",

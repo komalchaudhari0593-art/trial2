@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Corporate Lessons Learned Repository — JOST World</title>
+  <link href="libs/google-fonts/inter-700.css" rel="stylesheet">
+  <link rel="stylesheet" href="libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="quality-suite/css/quality-suite.css">
+  <style>
+    * { box-sizing: border-box; }
+
+    .header-topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.25rem;
+      padding-bottom: 0.85rem;
+      border-bottom: 1px solid var(--qs-border-light);
+    }
+
+    .search-bar-row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 1.25rem;
+    }
+
+    .search-box-wrapper {
+      position: relative;
+      width: 100%;
+    }
+
+    .search-box-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--qs-text-muted);
+      font-size: 0.82rem;
+      pointer-events: none;
+    }
+
+    .search-box-input {
+      width: 100%;
+      padding: 8px 12px 8px 34px;
+      background-color: var(--qs-bg-input);
+      border: 1px solid var(--qs-border-main);
+      border-radius: 8px;
+      color: var(--qs-text-main);
+      font-size: 0.82rem;
+      transition: all 0.2s;
+    }
+
+    .search-box-input:focus {
+      border-color: var(--qs-primary);
+      box-shadow: 0 0 0 3px var(--qs-primary-glow);
+    }
+
+    .filter-chip {
+      padding: 6px 12px;
+      border-radius: 20px;
+      background-color: var(--qs-bg-card-alt);
+      border: 1px solid var(--qs-border-main);
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--qs-text-muted);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .filter-chip:hover {
+      color: var(--qs-text-main);
+      border-color: var(--qs-primary);
+      transform: translateY(-1px);
+    }
+
+    .filter-chip.active {
+      background-color: var(--qs-primary);
+      color: #ffffff;
+      border-color: var(--qs-primary);
+      box-shadow: 0 2px 8px var(--qs-primary-glow);
+    }
+  </style>
+</head>
+
+<body>
+  <div class="qs-layout-wrapper">
+    <!-- Sidebar Navigation -->
+    <nav id="sidebar">
+      <div class="logo">
+        <img src="Logo_Jost.svg.webp" alt="JOST" onerror="this.style.display='none'">
+        <span>JOST QUALITY</span>
+      </div>
+      <a href="javascript:void(0)" onclick="safeNavigateTo('index.html')" class="nav-item">
+        <span class="nav-icon">🧭</span>
+        <span>FMEA Workbench</span>
+      </a>
+      <a href="javascript:void(0)" onclick="safeNavigateTo('FailureRegister.html?view=review')" class="nav-item">
+        <span class="nav-icon">📋</span>
+        <span>Failure Register</span>
+      </a>
+      <a href="javascript:void(0)" onclick="safeNavigateTo('FailureRegister.html?view=8d')" class="nav-item">
+        <span class="nav-icon">📑</span>
+        <span>8D Reports</span>
+      </a>
+      <a href="LessonsLearned.html" class="nav-item active">
+        <span class="nav-icon">🎓</span>
+        <span>Lessons Learned</span>
+      </a>
+
+      <div style="border-top: 1px solid var(--qs-border-main); margin: 6px 0; padding-top: 6px;"></div>
+
+      <a href="javascript:void(0)" id="nav-users" onclick="RightsManagement.openUserManagementModal()" class="nav-item" style="color: #60a5fa;">
+        <span class="nav-icon">👥</span>
+        <span>User &amp; Plant Rights</span>
+      </a>
+      <a href="javascript:void(0)" id="nav-location" onclick="RightsManagement.openLocationMasterModal()" class="nav-item">
+        <span class="nav-icon">🏢</span>
+        <span>Location Master</span>
+      </a>
+      <a href="javascript:void(0)" id="nav-taxonomy" onclick="window.ClassificationTreeAdmin ? ClassificationTreeAdmin.openModal() : (window.openClassificationTaxonomyModal ? openClassificationTaxonomyModal() : null)" class="nav-item">
+        <span class="nav-icon">🏷️</span>
+        <span>Product Taxonomy</span>
+      </a>
+
+      <div style="margin-top: auto; padding-top: 1rem; border-top: 1px solid var(--qs-border-main); display:flex; flex-direction:column; gap:10px;">
+        <div id="theme-toggle-container"></div>
+        <div id="storage-status" style="font-size: 0.72rem; color: var(--qs-text-muted); display:flex; align-items:center; gap:6px;">
+          <span>🔒</span>
+          <span>Storage: Encrypted Sync</span>
+        </div>
+        <a href="javascript:void(0)" onclick="safeNavigateTo('index.html')" class="nav-item" style="color: var(--qs-primary);">
+          <span class="nav-icon">←</span>
+          <span>Return to FMEA</span>
+        </a>
+      </div>
+    </nav>
+
+    <main>
+      <div class="header-topbar">
+        <div>
+          <h1 style="font-size: 1.4rem; margin: 0; display: flex; align-items: center; gap: 10px;">
+            <span style="color: var(--qs-primary);">🎓</span> Corporate Lessons Learned Knowledge Base
+          </h1>
+          <p style="color: var(--qs-text-muted); font-size: 0.82rem; margin: 3px 0 0 0;">
+            Verified Root Causes, Permanent Corrective Actions, and Standard Preventive Rules tagged with Product Classification Taxonomy.
+          </p>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <div style="display: flex; gap: 4px; background: var(--qs-bg-card); padding: 3px; border-radius: 8px; border: 1px solid var(--qs-border-main);">
+            <button id="btn-view-list" class="qs-view-toggle-btn active" onclick="LessonsLearnedManager.setViewMode('list')">☰ List View</button>
+            <button id="btn-view-grid" class="qs-view-toggle-btn" onclick="LessonsLearnedManager.setViewMode('grid')">⊞ Cards</button>
+          </div>
+          <button class="btn btn-ghost" onclick="LessonsLearnedManager.render()">🔄 Refresh</button>
+        </div>
+      </div>
+
+      <!-- Search & Filter Controls -->
+      <div class="search-bar-row">
+        <div class="search-box-wrapper" style="flex: 1; max-width: 420px;">
+          <input type="text" id="ll-search" class="search-box-input" placeholder="Search by Project, Part, Defect, or Root Cause keyword..." oninput="LessonsLearnedManager.setSearch(this.value)">
+          <span class="search-box-icon">🔍</span>
+        </div>
+
+        <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+          <span style="font-size: 0.75rem; color: var(--qs-text-muted); margin-right: 4px;">🏷️ Product Taxonomy:</span>
+          <button class="filter-chip active" onclick="setProductTaxonomyFilter('all', this)">All</button>
+          <button class="filter-chip" onclick="setProductTaxonomyFilter('prod-pipe', this)">📦 Pipes</button>
+          <button class="filter-chip" onclick="setProductTaxonomyFilter('prod-pipe-bend', this)">↳ Bends</button>
+          <button class="filter-chip" onclick="setProductTaxonomyFilter('prod-bracket', this)">📦 Brackets</button>
+          <button class="filter-chip" onclick="setProductTaxonomyFilter('prod-pin', this)">📦 Forged Pins</button>
+          <button class="filter-chip" onclick="setProductTaxonomyFilter('prod-cast', this)">📦 Castings</button>
+          <button class="btn btn-ghost" onclick="window.openClassificationTaxonomyModal()" style="font-size:0.75rem; padding:4px 10px; margin-left:8px;">
+            ⚙️ Admin Taxonomy
+          </button>
+        </div>
+      </div>
+
+      <!-- Lessons Learned Workspace Container (List or Grid) -->
+      <div id="lessons-learned-container" style="width: 100%;">
+        <!-- Injected via JavaScript -->
+      </div>
+    </main>
+  </div>
+
+  <script src="quality-suite/js/theme-engine.js"></script>
+  <script src="quality-suite/js/dialog-popups.js"></script>
+  <script src="quality-suite/js/quality-storage-sync.js"></script>
+  <script src="quality-suite/js/product-classification.js"></script>
+  <script src="quality-suite/js/classification-tree-admin.js"></script>
+  <script src="quality-suite/js/rights-management.js"></script>
+  <script src="quality-suite/js/lessons-learned.js"></script>
+  <script>
+    function isPageReload() {
+      try {
+        const navEntries = performance.getEntriesByType('navigation');
+        if (navEntries && navEntries.length > 0) {
+          return navEntries[0].type === 'reload';
+        }
+        if (window.performance && window.performance.navigation) {
+          return window.performance.navigation.type === 1;
+        }
+      } catch (e) { }
+      return false;
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      // Enforce session check: require login on page reload or when not authenticated
+      const isReload = isPageReload();
+      const isSessionActive = sessionStorage.getItem('jost_session_active') === 'true';
+      if (isReload || !isSessionActive) {
+        try {
+          sessionStorage.removeItem('jost_session_active');
+          sessionStorage.removeItem('jost_current_user');
+          localStorage.removeItem('jost_current_user');
+          localStorage.removeItem('fmea_user');
+        } catch (e) { }
+        window.location.href = 'index.html';
+        return;
+      }
+
+      await QualityStorageSync.init();
+      await ProductClassificationEngine.init();
+      RightsManagement.init();
+      LessonsLearnedManager.init();
+
+      // Check URL params for direct 8D transfer trigger
+      const params = new URLSearchParams(window.location.search);
+      const from8d = params.get('from8d');
+      if (from8d) {
+        try {
+          const res = await QualityStorageSync.transfer8DToLessonLearned(from8d, 'prod-pipe-bend');
+          if (window.showCustomToast) {
+            window.showCustomToast(`8D ${from8d} successfully captured as Lesson Learned ID: ${res.id}!`, 'success', 5000);
+          } else if (window.showCustomAlert) {
+            await window.showCustomAlert('Lesson Learned Captured', `8D ${from8d} successfully transferred to Lessons Learned ID: ${res.id}!`, 'success');
+          }
+          LessonsLearnedManager.render();
+        } catch (e) {
+          console.warn('Auto-transfer error:', e);
+        }
+      }
+    });
+
+    function setProductTaxonomyFilter(nodeId, el) {
+      document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+      el.classList.add('active');
+      LessonsLearnedManager.setProductTaxonomyFilter(nodeId);
+    }
+  </script>
+</body>
+
+</html>

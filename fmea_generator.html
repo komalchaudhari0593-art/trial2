@@ -2759,14 +2759,15 @@ This ensures that no technically credible item is discarded due to length limita
       document.getElementById('btnSaveMp').innerText = '💾 Save Prompt';
     }
 
-    function deleteMasterPromptItem(promptId) {
+    async function deleteMasterPromptItem(promptId) {
       const item = masterPromptLibrary.find(p => p.id === promptId);
       if (!item || item.isDefault) {
         alert("Default built-in master prompt cannot be deleted.");
         return;
       }
 
-      if (!confirm(`Are you sure you want to delete "${item.name}"?`)) return;
+      const isConfirmed = await showCustomConfirm(`Are you sure you want to delete "${item.name}"?`, 'Delete Master Prompt', 'warning');
+      if (!isConfirmed) return;
 
       masterPromptLibrary = masterPromptLibrary.filter(p => p.id !== promptId);
       if (activeMasterPromptId === promptId) {
@@ -2889,16 +2890,18 @@ This ensures that no technically credible item is discarded due to length limita
       document.getElementById('btnSavePrectrl').innerText = '💾 Save Changes';
     }
 
-    function removePredefinedControlItem(sysId) {
-      if (!confirm("Are you sure you want to remove this control item?")) return;
+    async function removePredefinedControlItem(sysId) {
+      const isConfirmed = await showCustomConfirm("Are you sure you want to remove this control item?", "Remove Control", "warning");
+      if (!isConfirmed) return;
       predefinedControlsList = predefinedControlsList.filter(c => c.sysId !== sysId);
       renderPredefinedControlsModalList();
       generateAiPrompts();
       showToast("🗑️ Removed control item from library.", "🗑️");
     }
 
-    function clearAllPredefinedControls() {
-      if (!confirm("Are you sure you want to clear all items in the predefined controls library?")) return;
+    async function clearAllPredefinedControls() {
+      const isConfirmed = await showCustomConfirm("Are you sure you want to clear all items in the predefined controls library?", "Clear Controls Library", "warning");
+      if (!isConfirmed) return;
       predefinedControlsList = [];
       renderPredefinedControlsModalList();
       generateAiPrompts();
@@ -3279,7 +3282,7 @@ This ensures that no technically credible item is discarded due to length limita
       document.getElementById('btnSaveTreeNode').innerText = '💾 Save Changes';
     }
 
-    function deleteTreeNodeItem(nodeId) {
+    async function deleteTreeNodeItem(nodeId) {
       if (!nodeId) return;
       const targetNode = systemStructureTree.find(n => n.id === nodeId);
       if (!targetNode) {
@@ -3288,7 +3291,8 @@ This ensures that no technically credible item is discarded due to length limita
       }
 
       const nodeName = targetNode.name || targetNode.partNo || 'Selected item';
-      if (!confirm(`Are you sure you want to remove "${nodeName}" and its child elements from the structure tree?`)) return;
+      const isConfirmed = await showCustomConfirm(`Are you sure you want to remove "${nodeName}" and its child elements from the structure tree?`, 'Delete Structure Node', 'warning');
+      if (!isConfirmed) return;
 
       function getChildSubtreeIds(pId) {
         let ids = [pId];
@@ -3307,8 +3311,9 @@ This ensures that no technically credible item is discarded due to length limita
       showToast(`🗑️ Removed "${nodeName}" from folder tree.`, "🗑️");
     }
 
-    function clearAllTreeNodesConfirm() {
-      if (!confirm("Are you sure you want to clear the entire structure tree?")) return;
+    async function clearAllTreeNodesConfirm() {
+      const isConfirmed = await showCustomConfirm("Are you sure you want to clear the entire structure tree?", "Clear Structure Tree", "warning");
+      if (!isConfirmed) return;
       systemStructureTree = [];
       renderMainPageTreeVisualizer();
       renderStructureTreeParentSelect();
@@ -4030,8 +4035,9 @@ This ensures that no technically credible item is discarded due to length limita
       }).join('');
     }
 
-    function removeComponentFromPackage(structId) {
-      if (!confirm("Are you sure you want to remove this component from the package?")) return;
+    async function removeComponentFromPackage(structId) {
+      const isConfirmed = await showCustomConfirm("Are you sure you want to remove this component from the package?", "Remove Component", "warning");
+      if (!isConfirmed) return;
       
       fmeaPackageState.structure = fmeaPackageState.structure.filter(s => s.id !== structId);
       fmeaPackageState.functions = fmeaPackageState.functions.filter(f => f.structId !== structId);
@@ -4237,8 +4243,9 @@ This ensures that no technically credible item is discarded due to length limita
       showToast("💾 Exported complete FMEA package JSON file!", "💾");
     }
 
-    function resetWorkstationSession() {
-      if (!confirm("Are you sure you want to reset your session and clear all accumulated package data?")) return;
+    async function resetWorkstationSession() {
+      const isConfirmed = await showCustomConfirm("Are you sure you want to reset your session and clear all accumulated package data?", "Reset Session", "warning");
+      if (!isConfirmed) return;
       
       // Clear package data
       fmeaPackageState.structure = [];

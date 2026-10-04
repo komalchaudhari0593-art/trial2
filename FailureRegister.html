@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quality Failure Register & 8D Problem Solving — JOST World</title>
+  <link rel="icon" type="image/webp" href="Logo_Jost.svg.webp">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="quality-suite/css/quality-suite.css">
+  <style>
+    .tab-container {
+      display: flex;
+      gap: 16px;
+      border-bottom: 1px solid var(--qs-border-main);
+      margin-bottom: 16px;
+      padding: 0 1rem;
+    }
+
+    .tab {
+      padding: 10px 4px;
+      cursor: pointer;
+      color: var(--qs-text-muted);
+      font-size: 0.82rem;
+      font-weight: 700;
+      position: relative;
+      transition: all 0.2s;
+    }
+
+    .tab:hover { color: var(--qs-text-main); }
+    .tab.active { color: var(--qs-primary); }
+    .tab.active::after {
+      content: '';
+      position: absolute;
+      bottom: -1px;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--qs-primary);
+    }
+
+    .view-container { display: none; }
+    .view-container.active { display: block; }
+
+    .dropdown-toggle {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      background-color: var(--qs-bg-input);
+      border: 1px solid var(--qs-border-main);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.82rem;
+    }
+    .dropdown-menu {
+      position: absolute;
+      top: calc(100% + 5px);
+      left: 0;
+      right: 0;
+      background-color: var(--qs-bg-card);
+      border: 1px solid var(--qs-border-main);
+      border-radius: 8px;
+      box-shadow: var(--qs-shadow-lg);
+      z-index: 1000;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .dropdown-list { max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+    .dropdown-item {
+      padding: 6px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .dropdown-item:hover { background-color: var(--qs-primary-surface); color: var(--qs-primary); }
+    .type-badge { font-size: 0.68rem; padding: 2px 6px; background-color: var(--qs-tag-bg); border-radius: 4px; color: var(--qs-text-muted); }
+  </style>
+</head>
+
+<body>
+  <div class="qs-layout-wrapper">
+    <!-- Sidebar Navigation -->
+    <nav id="sidebar">
+      <div class="logo">
+        <img src="Logo_Jost.svg.webp" alt="JOST" onerror="this.style.display='none'">
+        <span>JOST QUALITY</span>
+      </div>
+
+      <a href="javascript:void(0)" onclick="safeNavigateTo('index.html', isQualityWorkspaceDirty, saveQualityDraft)" class="nav-item">
+        <span class="nav-icon">🧭</span>
+        <span>FMEA Workbench</span>
+      </a>
+      <a href="#" id="nav-review" onclick="switchView('review')" class="nav-item">
+        <span class="nav-icon">📋</span>
+        <span>Failure Register</span>
+      </a>
+      <a href="#" id="nav-8d" onclick="switchView('8d')" class="nav-item active">
+        <span class="nav-icon">📑</span>
+        <span>8D Problem Solving</span>
+      </a>
+      <a href="#" id="nav-log" onclick="switchView('log')" class="nav-item">
+        <span class="nav-icon">➕</span>
+        <span>Log Quality Failure</span>
+      </a>
+      <a href="javascript:void(0)" onclick="safeNavigateTo('LessonsLearned.html', isQualityWorkspaceDirty, saveQualityDraft)" class="nav-item">
+        <span class="nav-icon">🎓</span>
+        <span>Lessons Learned</span>
+      </a>
+
+      <div style="border-top: 1px solid var(--qs-border-main); margin: 6px 0; padding-top: 6px;"></div>
+
+      <a href="javascript:void(0)" id="nav-users" onclick="RightsManagement.openUserManagementModal()" class="nav-item" style="color: #60a5fa;">
+        <span class="nav-icon">👥</span>
+        <span>User &amp; Plant Rights</span>
+      </a>
+      <a href="javascript:void(0)" id="nav-location" onclick="RightsManagement.openLocationMasterModal()" class="nav-item">
+        <span class="nav-icon">🏢</span>
+        <span>Location Master</span>
+      </a>
+      <a href="javascript:void(0)" id="nav-taxonomy" onclick="window.ClassificationTreeAdmin ? ClassificationTreeAdmin.openModal() : (window.openClassificationTaxonomyModal ? openClassificationTaxonomyModal() : null)" class="nav-item">
+        <span class="nav-icon">🏷️</span>
+        <span>Product Taxonomy</span>
+      </a>
+
+      <div style="margin-top: auto; padding-top: 1rem; border-top: 1px solid var(--qs-border-main); display:flex; flex-direction:column; gap:10px;">
+        <div id="theme-toggle-container"></div>
+        <div id="user-info-badge" style="font-size: 0.78rem; color: var(--qs-text-muted); display:flex; align-items:center; gap:6px;">
+          <span>👤</span>
+          <span>Quality Engineer</span>
+        </div>
+        <div style="font-size: 0.72rem; color: var(--qs-text-muted); opacity: 0.85; display:flex; align-items:center; gap:6px;">
+          <span>📂</span>
+          <span>Admin Sync: Active</span>
+        </div>
+      </div>
+    </nav>
+
+    <!-- MAIN WORKSPACE -->
+    <main>
+    <!-- VIEW 3: 8D Problem Solving List (Primary View) -->
+    <div id="view-8d-list" class="view-container active">
+      <!-- Topbar Header -->
+      <div class="qs-topbar">
+        <div class="qs-topbar-title">
+          <h1>📑 8D Problem Solving Reports</h1>
+          <p>Analytical D0–D8 Root Cause Investigation, Permanent Corrective Actions & Lessons Learned Integration</p>
+        </div>
+        <div style="display:flex; gap:10px;">
+          <button class="btn btn-ghost" onclick="load8DList()"><span class="btn-icon">🔄</span> Refresh</button>
+          <button class="btn btn-primary" onclick="createNew8D()"><span class="btn-icon">➕</span> New 8D Report</button>
+        </div>
+      </div>
+
+      <!-- Executive KPI Cards Grid -->
+      <div class="qs-kpi-grid">
+        <div class="qs-kpi-card">
+          <div class="qs-kpi-icon" style="background:var(--qs-primary-surface); color:var(--qs-primary);">📑</div>
+          <div>
+            <div class="qs-kpi-value" id="kpi-total-8d">0</div>
+            <div class="qs-kpi-label">Total 8D Cases</div>
+          </div>
+        </div>
+        <div class="qs-kpi-card">
+          <div class="qs-kpi-icon" style="background:var(--qs-warning-surface); color:var(--qs-warning);">🟡</div>
+          <div>
+            <div class="qs-kpi-value" id="kpi-open-8d">0</div>
+            <div class="qs-kpi-label">Active / Open</div>
+          </div>
+        </div>
+        <div class="qs-kpi-card">
+          <div class="qs-kpi-icon" style="background:var(--qs-success-surface); color:var(--qs-success);">🟢</div>
+          <div>
+            <div class="qs-kpi-value" id="kpi-closed-8d">0</div>
+            <div class="qs-kpi-label">Closed & Frozen</div>
+          </div>
+        </div>
+        <div class="qs-kpi-card">
+          <div class="qs-kpi-icon" style="background:rgba(99,102,241,0.15); color:#6366f1;">🎓</div>
+          <div>
+            <div class="qs-kpi-value" id="kpi-lessons-captured">0</div>
+            <div class="qs-kpi-label">Lessons Captured</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Analytical Archive Card -->
+      <div class="card" style="padding:0; overflow:hidden;">
+        <div style="padding:1.25rem 1.25rem 0.5rem 1.25rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+          <div class="search-box-wrapper" style="max-width:380px;">
+            <input type="text" id="eightd-search" class="search-box-input" placeholder="Search by 8D #, Part, Customer, Problem..." oninput="render8DList()">
+            <span class="search-box-icon">🔍</span>
+          </div>
+
+          <div class="tab-container" style="margin-bottom:0; padding:0; border-bottom:none;">
+            <div class="tab active" id="tab-8d-all" onclick="set8DTab('all')">All Reports</div>
+            <div class="tab" id="tab-8d-open" onclick="set8DTab('open')">Open / In Progress</div>
+            <div class="tab" id="tab-8d-closed" onclick="set8DTab('closed')">Finalized / Closed</div>
+          </div>
+        </div>
+
+        <div style="overflow-x:auto; width:100%;">
+          <table id="eightd-table" class="qs-data-table" style="width:100%; table-layout:fixed; min-width:860px;">
+            <colgroup>
+              <col style="width: 15%;">
+              <col style="width: 17%;">
+              <col style="width: 24%;">
+              <col style="width: 18%;">
+              <col style="width: 14%;">
+              <col style="width: 12%;">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>Report # / Date</th>
+                <th>Manufacturing Plant</th>
+                <th>Part Details / Project</th>
+                <th>Assigned Lead (Owner)</th>
+                <th>Status</th>
+                <th style="text-align:right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="eightd-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW 1: Quality Review Register -->
+    <div id="review-view" class="view-container">
+      <div class="qs-topbar">
+        <div class="qs-topbar-title">
+          <h1>📋 Operational Failure Register</h1>
+          <p>Engineering Review Gate for Non-conformances and 8D Initiation</p>
+        </div>
+        <div>
+          <button class="btn btn-primary" onclick="switchView('log')"><span class="btn-icon">➕</span> Record Failure Log</button>
+        </div>
+      </div>
+
+      <div class="card" style="padding:0; overflow:hidden;">
+        <div style="padding:1.25rem 1.25rem 0.5rem 1.25rem; display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
+          <div class="search-box-wrapper" style="max-width:380px; flex:1;">
+            <input type="text" id="reg-search" class="search-box-input" placeholder="Search failure logs by plant, project, part..." oninput="FailureRegisterManager.setSearch(this.value)">
+            <span class="search-box-icon">🔍</span>
+          </div>
+          <div id="reg-plant-filter-container"></div>
+        </div>
+
+        <div class="tab-container">
+          <div class="tab active" id="tab-reg-all" onclick="FailureRegisterManager.setTab('all')">All Records</div>
+          <div class="tab" id="tab-reg-pending" onclick="FailureRegisterManager.setTab('pending')">Review Pending</div>
+          <div class="tab" id="tab-reg-verified" onclick="FailureRegisterManager.setTab('verified')">8D Active</div>
+        </div>
+
+        <div style="overflow-x:auto; width:100%;">
+          <table id="records-table" class="qs-data-table" style="width:100%; table-layout:fixed; min-width:920px;">
+            <colgroup>
+              <col style="width: 10%;">
+              <col style="width: 14%;">
+              <col style="width: 18%;">
+              <col style="width: 12%;">
+              <col style="width: 5%;">
+              <col style="width: 25%;">
+              <col style="width: 10%;">
+              <col style="width: 6%;">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>ID / Date</th>
+                <th>Plant / Logged By</th>
+                <th>Project / Part</th>
+                <th>Category</th>
+                <th style="text-align:center;">Qty</th>
+                <th>Observed Location / Description</th>
+                <th>8D Decision</th>
+                <th style="text-align:center;">Linked 8D</th>
+              </tr>
+            </thead>
+            <tbody id="records-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW 2: Operator Log Entry Form -->
+    <div id="operator-entry-view" class="view-container" style="max-width:850px; margin:0 auto; width:100%;">
+      <div id="entry-form-container">
+        <div class="qs-topbar">
+          <div class="qs-topbar-title">
+            <h1>➕ Record Quality Failure Incident</h1>
+            <p>Log shop floor deviation or non-conformance for engineering review.</p>
+          </div>
+        </div>
+
+        <form id="failure-form" class="card" onsubmit="FailureRegisterManager.handleFormSubmit(event)">
+          <div style="font-size:0.75rem; font-weight:700; color:var(--qs-primary); margin-bottom:8px;">
+            🏢 PLANT &amp; ITEM IDENTIFICATION
+          </div>
+          <div class="form-grid" style="grid-template-columns: 1.5fr 1fr 1fr 1fr; margin-bottom:14px;">
+            <div class="input-group">
+              <label>Manufacturing Plant <span style="color:var(--qs-danger)">*</span></label>
+              <select id="log-plant-select" required style="font-weight:600;"></select>
+            </div>
+            <div class="input-group">
+              <label>Project Code <span style="color:var(--qs-danger)">*</span></label>
+              <input type="text" id="project_code" placeholder="e.g. P-J500-EV" required>
+            </div>
+            <div class="input-group">
+              <label>Part Number <span style="color:var(--qs-danger)">*</span></label>
+              <input type="text" id="part_number" placeholder="e.g. JST-500-BRK" required>
+            </div>
+            <div class="input-group">
+              <label>Part Name <span style="color:var(--qs-danger)">*</span></label>
+              <input type="text" id="part_name" placeholder="e.g. Mounting Bracket" required>
+            </div>
+          </div>
+
+          <div style="font-size:0.75rem; font-weight:700; color:var(--qs-primary); margin-bottom:8px;">
+            🏷️ CLASSIFICATION &amp; LOCATION
+          </div>
+          <div class="form-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom:14px;">
+            <div class="input-group">
+              <label>Defect Category <span style="color:var(--qs-danger)">*</span></label>
+              <select id="category_id" required></select>
+            </div>
+            <div class="input-group">
+              <label>Quantity Rejected <span style="color:var(--qs-danger)">*</span></label>
+              <input type="number" id="qty_rejected" value="1" min="1" required>
+            </div>
+            <div class="input-group">
+              <label>Observed Location <span style="color:var(--qs-danger)">*</span></label>
+              <div class="searchable-dropdown" id="observed-dropdown">
+                <div class="dropdown-toggle" onclick="toggleObservedDropdown(event)">
+                  <span id="observed-selected">Shop Floor (Internal Line)</span>
+                  <span>▾</span>
+                </div>
+                <div class="dropdown-menu" id="observed-menu" style="display:none;">
+                  <div class="dropdown-list" id="observed-list"></div>
+                </div>
+              </div>
+              <input type="hidden" id="observed_where" value="Shop Floor (Internal Line)" required>
+            </div>
+          </div>
+
+          <div class="input-group" style="margin-bottom:14px;">
+            <label>Failure Description Details <span style="color:var(--qs-danger)">*</span></label>
+            <textarea id="failure_description" rows="4" placeholder="Describe the symptom, visual deviation, and operating condition..." required></textarea>
+          </div>
+
+          <div style="background:rgba(245, 158, 11, 0.1); border:1px solid var(--qs-warning); padding:8px 12px; border-radius:6px; margin-bottom:14px; font-size:0.75rem; color:var(--qs-text-muted); display:flex; align-items:center; gap:6px;">
+            <span>🔒</span>
+            <span><strong>Note:</strong> Once submitted, this record is locked against plant floor edits and forwarded directly to the Quality Engineering review queue.</span>
+          </div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--qs-border-main); padding-top:12px;">
+            <button type="button" class="btn btn-ghost" onclick="switchView('review')">Cancel</button>
+            <button type="submit" class="btn btn-primary" style="padding:8px 20px;">Submit Incident Log</button>
+          </div>
+        </form>
+      </div>
+
+      <div id="success-screen" class="card" style="display:none; text-align:center; padding:3rem 1.5rem;">
+        <div style="font-size:3rem; margin-bottom:1rem;">✅</div>
+        <h2 style="margin:0;">Failure Recorded Successfully</h2>
+        <p id="logged-id-badge" style="color:var(--qs-primary); font-weight:700; margin:8px 0 1.5rem 0;">Incident ID: FR-2026-003</p>
+        <div style="display:flex; justify-content:center; gap:10px;">
+          <button class="btn btn-primary" onclick="FailureRegisterManager.resetEntryForm()">Record Another</button>
+          <button class="btn btn-ghost" onclick="switchView('review')">View Failure Register</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW 4: 8D Form Workspace -->
+    <div id="view-8d-form" class="view-container">
+      <div class="qs-topbar">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <button class="btn btn-ghost" onclick="switchView('8d')" style="padding:6px 10px;">← Back to List</button>
+          <div class="qs-topbar-title">
+            <h1 id="eightd-form-title" style="font-size:1.3rem;">8D Workspace</h1>
+          </div>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-primary" onclick="saveActive8D()">💾 Save 8D Report</button>
+        </div>
+      </div>
+      <div id="eightd-workspace-content"></div>
+    </div>
+  </main>
+  </div>
+
+  <!-- RCA MODAL: 5W2H Problem Framing -->
+  <div id="modal-5w2h" class="modal-overlay" style="display:none;">
+    <div class="modal-content" style="max-width: 750px;">
+      <header style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid var(--qs-border-light); padding-bottom:8px;">
+        <h3 style="margin:0; color:var(--qs-primary);">❓ 5W2H Problem Framing Tool</h3>
+        <span onclick="closeRcaModal('modal-5w2h')" style="cursor:pointer; font-size:1.2rem; opacity:0.6;">✕</span>
+      </header>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0;">
+        <div class="input-group"><label>Who (Observer / Detected by)</label><input type="text" id="w-who" placeholder="Observer who detected"></div>
+        <div class="input-group"><label>What (Specific Defect)</label><input type="text" id="w-what" placeholder="Specific physical defect / deviation"></div>
+        <div class="input-group"><label>Where (Station / Part Location)</label><input type="text" id="w-where" placeholder="Process station / Machine OP"></div>
+        <div class="input-group"><label>When (Date / Shift / Hours)</label><input type="text" id="w-when" placeholder="Date / Shift"></div>
+        <div class="input-group"><label>Why (Impact on Fit/Function)</label><input type="text" id="w-why" placeholder="Impact on safety, fit, function"></div>
+        <div class="input-group"><label>How (Operating Condition)</label><input type="text" id="w-how" placeholder="Operating state when defect occurred"></div>
+        <div class="input-group" style="grid-column: 1 / -1;"><label>How Many (Rejected Qty / PPM)</label><input type="text" id="w-howmany" placeholder="Total quantity rejected / affected count"></div>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:8px;">
+        <button class="btn btn-ghost" onclick="closeRcaModal('modal-5w2h')">Cancel</button>
+        <button class="btn btn-primary" onclick="apply5W2H()">Apply to D2 Statement</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RCA MODAL: IS / IS NOT Matrix -->
+  <div id="modal-isnot" class="modal-overlay" style="display:none;">
+    <div class="modal-content" style="max-width: 900px;">
+      <header style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid var(--qs-border-light); padding-bottom:8px;">
+        <h3 style="margin:0; color:var(--qs-warning);">📊 IS / IS NOT Comparative Problem Analysis</h3>
+        <span onclick="closeRcaModal('modal-isnot')" style="cursor:pointer; font-size:1.2rem; opacity:0.6;">✕</span>
+      </header>
+      <div style="display:grid; grid-template-columns: 1fr 2fr 2fr 1.5fr; gap: 8px; margin: 14px 0; font-size:0.75rem; color:var(--qs-text-muted); font-weight:700;">
+        <div>DIMENSION</div><div>IS (Observed Fact)</div><div>IS NOT (Could be, but is not)</div><div>KEY DISTINCTION</div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div style="display:grid; grid-template-columns: 1fr 2fr 2fr 1.5fr; gap: 8px; align-items:center;">
+          <div style="font-weight:700; color:var(--qs-primary);">WHAT</div>
+          <input type="text" id="isnot-what-is" placeholder="Observed defect...">
+          <input type="text" id="isnot-what-isnot" placeholder="Defect that could occur...">
+          <input type="text" id="isnot-what-diff" placeholder="Distinction...">
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 2fr 2fr 1.5fr; gap: 8px; align-items:center;">
+          <div style="font-weight:700; color:var(--qs-primary);">WHERE</div>
+          <input type="text" id="isnot-where-is" placeholder="Observed part location...">
+          <input type="text" id="isnot-where-isnot" placeholder="Where it could be...">
+          <input type="text" id="isnot-where-diff" placeholder="Distinction...">
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 2fr 2fr 1.5fr; gap: 8px; align-items:center;">
+          <div style="font-weight:700; color:var(--qs-primary);">WHEN</div>
+          <input type="text" id="isnot-when-is" placeholder="First seen timestamp...">
+          <input type="text" id="isnot-when-isnot" placeholder="When it could occur...">
+          <input type="text" id="isnot-when-diff" placeholder="Distinction...">
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 2fr 2fr 1.5fr; gap: 8px; align-items:center;">
+          <div style="font-weight:700; color:var(--qs-primary);">EXTENT</div>
+          <input type="text" id="isnot-extent-is" placeholder="Defect count / trend...">
+          <input type="text" id="isnot-extent-isnot" placeholder="Count could be...">
+          <input type="text" id="isnot-extent-diff" placeholder="Distinction...">
+        </div>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+        <button class="btn btn-ghost" onclick="closeRcaModal('modal-isnot')">Cancel</button>
+        <button class="btn btn-primary" onclick="applyIsIsNot()">Apply to D2 Statement</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RCA MODAL: Dual-Chain 5-Why -->
+  <div id="modal-5why" class="modal-overlay" style="display:none;">
+    <div class="modal-content" style="max-width: 800px;">
+      <header style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid var(--qs-border-light); padding-bottom:8px;">
+        <h3 style="margin:0; color:var(--qs-primary);">🔍 Dual-Chain 5-Why Root Cause Formulation</h3>
+        <span onclick="closeRcaModal('modal-5why')" style="cursor:pointer; font-size:1.2rem; opacity:0.6;">✕</span>
+      </header>
+      <div style="display:flex; border-bottom:1px solid var(--qs-border-main); margin:12px 0;">
+        <div id="fr-why-tab-occ" onclick="switchWhyChainType('occ')" style="flex:1; padding:10px; text-align:center; font-weight:bold; cursor:pointer; color:var(--qs-primary); border-bottom:2px solid var(--qs-primary);">
+          ⚙️ OCCURRENCE CHAIN (Why Made?)
+        </div>
+        <div id="fr-why-tab-esc" onclick="switchWhyChainType('esc')" style="flex:1; padding:10px; text-align:center; font-weight:bold; cursor:pointer; color:var(--qs-text-muted);">
+          🛡️ ESCAPE CHAIN (Why Sent Undetected?)
+        </div>
+      </div>
+      <div class="input-group" style="margin-bottom:10px;">
+        <label>Chain Title / Focus Area</label>
+        <input type="text" id="why-title" placeholder="e.g. Reamer Sensor Wear Detection">
+      </div>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div class="input-group"><label>1. First Level Why (Observed Symptom)</label><input type="text" id="why-1" placeholder="Why did the defect occur?"></div>
+        <div class="input-group"><label>2. Second Level Why</label><input type="text" id="why-2"></div>
+        <div class="input-group"><label>3. Third Level Why</label><input type="text" id="why-3"></div>
+        <div class="input-group"><label>4. Fourth Level Why</label><input type="text" id="why-4"></div>
+        <div class="input-group"><label style="color:var(--qs-primary); font-weight:700;">5. Root Cause (Fifth Level Why)</label><input type="text" id="why-5" style="border-color:var(--qs-primary);"></div>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+        <button class="btn btn-ghost" onclick="closeRcaModal('modal-5why')">Cancel</button>
+        <button class="btn btn-primary" onclick="apply5WhyChain()">Save 5-Why Chain</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RCA MODAL: Ishikawa 6M -->
+  <div id="modal-fishbone" class="modal-overlay" style="display:none;">
+    <div class="modal-content" style="max-width: 900px;">
+      <header style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid var(--qs-border-light); padding-bottom:8px;">
+        <h3 style="margin:0; color:var(--qs-warning);">🐟 Ishikawa 6M Cause Analysis</h3>
+        <span onclick="closeRcaModal('modal-fishbone')" style="cursor:pointer; font-size:1.2rem; opacity:0.6;">✕</span>
+      </header>
+      <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0;">
+        <div class="input-group">
+          <label>👤 Man / Operator</label>
+          <textarea id="fb-man" rows="2" placeholder="Skills, fatigue, training..."></textarea>
+        </div>
+        <div class="input-group">
+          <label>⚙️ Machine / Tooling</label>
+          <textarea id="fb-machine" rows="2" placeholder="Wear, calibration, spindle..."></textarea>
+        </div>
+        <div class="input-group">
+          <label>📦 Material / Batch</label>
+          <textarea id="fb-material" rows="2" placeholder="Hardness, raw stock batch..."></textarea>
+        </div>
+        <div class="input-group">
+          <label>📋 Method / SOP</label>
+          <textarea id="fb-method" rows="2" placeholder="Speed, feed, clamping..."></textarea>
+        </div>
+        <div class="input-group">
+          <label>📐 Measurement / Gauge</label>
+          <textarea id="fb-measurement" rows="2" placeholder="Gauge accuracy, calibration..."></textarea>
+        </div>
+        <div class="input-group">
+          <label>🌡️ Environment</label>
+          <textarea id="fb-env" rows="2" placeholder="Temperature, coolant, lighting..."></textarea>
+        </div>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:8px;">
+        <button class="btn btn-ghost" onclick="closeRcaModal('modal-fishbone')">Cancel</button>
+        <button class="btn btn-primary" onclick="applyFishbone()">Save Ishikawa Matrix</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Transfer to Lessons Learned with Product Classification -->
+  <div id="modal-transfer-ll" class="modal-overlay" style="display:none;">
+    <div class="modal-content" style="max-width: 600px;">
+      <header style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid var(--qs-border-light); padding-bottom:8px;">
+        <h3 style="margin:0; color:var(--qs-primary);">🎓 Transfer 8D to Corporate Lessons Learned</h3>
+        <span onclick="closeRcaModal('modal-transfer-ll')" style="cursor:pointer; font-size:1.2rem; opacity:0.6;">✕</span>
+      </header>
+      <div style="margin:16px 0; display:flex; flex-direction:column; gap:12px;">
+        <p style="font-size:0.82rem; color:var(--qs-text-muted); margin:0;">
+          Select the generic Product Component & Feature Taxonomy node (e.g. <em>Pipe &gt; Bend</em>) to link this proven root cause and preventive rule for automated FMEA inheritance.
+        </p>
+        <div class="input-group">
+          <label>Product Classification & Feature Lineage</label>
+          <select id="ll-transfer-product-taxonomy" style="padding:10px; font-weight:600;"></select>
+        </div>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:8px;">
+        <button class="btn btn-ghost" onclick="closeRcaModal('modal-transfer-ll')">Cancel</button>
+        <button class="btn btn-primary" onclick="confirmLessonLearnedTransfer()">Confirm & Transfer</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="quality-suite/js/theme-engine.js"></script>
+  <script src="quality-suite/js/dialog-popups.js"></script>
+  <script src="quality-suite/js/quality-storage-sync.js"></script>
+  <script src="quality-suite/js/product-classification.js"></script>
+  <script src="quality-suite/js/classification-tree-admin.js"></script>
+  <script src="quality-suite/js/rights-management.js"></script>
+  <script src="quality-suite/js/rca-tools.js"></script>
+  <script src="quality-suite/js/eight-d-engine.js"></script>
+  <script src="quality-suite/js/failure-register.js"></script>
+  <script src="quality-suite/js/lessons-learned.js"></script>
+  <script src="quality-suite/js/fmea-classification-linker.js"></script>
+
+  <script>
+    let active8DId = null;
+    let pendingTransfer8DId = null;
+    let activeWhyChainType = 'occ';
+    let active8DTab = 'all';
+
+    function isPageReload() {
+      try {
+        const navEntries = performance.getEntriesByType('navigation');
+        if (navEntries && navEntries.length > 0) {
+          return navEntries[0].type === 'reload';
+        }
+        if (window.performance && window.performance.navigation) {
+          return window.performance.navigation.type === 1;
+        }
+      } catch (e) { }
+      return false;
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      // Enforce session check: require login on page reload or when not authenticated
+      const isReload = isPageReload();
+      const isSessionActive = sessionStorage.getItem('jost_session_active') === 'true';
+      if (isReload || !isSessionActive) {
+        try {
+          sessionStorage.removeItem('jost_session_active');
+          sessionStorage.removeItem('jost_current_user');
+          localStorage.removeItem('jost_current_user');
+          localStorage.removeItem('fmea_user');
+        } catch (e) { }
+        window.location.href = 'index.html';
+        return;
+      }
+
+      await QualityStorageSync.init();
+      await ProductClassificationEngine.init();
+      window.eightDEngine = new EightDEngine('eightd-workspace-content');
+      RightsManagement.init();
+      FailureRegisterManager.init();
+      load8DList();
+
+      const params = new URLSearchParams(window.location.search);
+      const view = params.get('view');
+      const id = params.get('id');
+
+      if (id) window.open8DReport(id);
+      else if (view === 'log') switchView('log');
+      else if (view === 'review') switchView('review');
+      else switchView('8d');
+    });
+
+    function switchView(view) {
+      document.querySelectorAll('.view-container').forEach(v => v.classList.remove('active'));
+      document.querySelectorAll('#sidebar .nav-item').forEach(n => n.classList.remove('active'));
+
+      if (view === 'log') {
+        document.getElementById('operator-entry-view').classList.add('active');
+        document.getElementById('nav-log')?.classList.add('active');
+      } else if (view === 'review') {
+        document.getElementById('review-view').classList.add('active');
+        document.getElementById('nav-review')?.classList.add('active');
+        FailureRegisterManager.render();
+      } else if (view === '8d-form') {
+        document.getElementById('view-8d-form').classList.add('active');
+        document.getElementById('nav-8d')?.classList.add('active');
+      } else {
+        document.getElementById('view-8d-list').classList.add('active');
+        document.getElementById('nav-8d')?.classList.add('active');
+        load8DList();
+      }
+    }
+
+    function set8DTab(tab) {
+      active8DTab = tab;
+      document.querySelectorAll('#view-8d-list .tab').forEach(t => t.classList.remove('active'));
+      const target = document.getElementById(`tab-8d-${tab}`);
+      if (target) target.classList.add('active');
+      render8DList();
+    }
+
+    async function load8DList() {
+      await QualityStorageSync.load8DReports();
+      render8DList();
+      updateKpis();
+    }
+
+    function updateKpis() {
+      const user = QualityStorageSync.getCurrentUser();
+      const allReports = QualityStorageSync.getState().eightDReports || [];
+      const reports = allReports.filter(r => {
+        const hasPlant = QualityStorageSync.hasPlantAccess(r.plant_id, user);
+        const isAssigned = r.assigned_lead_user_id === user.id || r.assigned_lead_username === user.username || (r.team_member_user_ids && r.team_member_user_ids.includes(user.id));
+        if (user.role === 'Plant User') return isAssigned || hasPlant;
+        if (user.role === 'Quality User') return hasPlant;
+        return true;
+      });
+
+      const total = reports.length;
+      const closed = reports.filter(r => r.status === 'Closed' || r.is_frozen).length;
+      const open = total - closed;
+      const lessonsCaptured = reports.filter(r => r.lesson_learned_status === 'Captured').length;
+
+      const elTotal = document.getElementById('kpi-total-8d');
+      const elOpen = document.getElementById('kpi-open-8d');
+      const elClosed = document.getElementById('kpi-closed-8d');
+      const elLessons = document.getElementById('kpi-lessons-captured');
+
+      if (elTotal) elTotal.innerText = total;
+      if (elOpen) elOpen.innerText = open;
+      if (elClosed) elClosed.innerText = closed;
+      if (elLessons) elLessons.innerText = lessonsCaptured;
+    }
+
+    function render8DList() {
+      const tbody = document.getElementById('eightd-table-body');
+      if (!tbody) return;
+      const user = QualityStorageSync.getCurrentUser();
+      const reports = QualityStorageSync.getState().eightDReports || [];
+      const search = (document.getElementById('eightd-search')?.value || '').toLowerCase().trim();
+      tbody.innerHTML = '';
+
+      const filtered = reports.filter(r => {
+        const hasPlant = QualityStorageSync.hasPlantAccess(r.plant_id, user);
+        const isAssigned = r.assigned_lead_user_id === user.id || r.assigned_lead_username === user.username || (r.team_member_user_ids && r.team_member_user_ids.includes(user.id));
+
+        if (user.role === 'Plant User' && !isAssigned && !hasPlant) return false;
+        if (user.role === 'Quality User' && !hasPlant) return false;
+
+        const str = `${r.report_number || ''} ${r.plant_name || ''} ${r.customer_name || ''} ${r.part_number || ''} ${r.part_name || ''} ${r.project_code || ''} ${r.assigned_lead_name || ''}`.toLowerCase();
+        const matchSearch = !search || str.includes(search);
+        let matchTab = true;
+        if (active8DTab === 'open') matchTab = r.status !== 'Closed' && !r.is_frozen;
+        else if (active8DTab === 'closed') matchTab = r.status === 'Closed' || r.is_frozen;
+        return matchSearch && matchTab;
+      });
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:2.5rem; color:var(--qs-text-muted); font-size:0.85rem;">No 8D Reports matching current criteria for your assigned plants.</td></tr>`;
+        return;
+      }
+
+      filtered.forEach(r => {
+        const tr = document.createElement('tr');
+        const isClosed = r.status === 'Closed' || r.is_frozen;
+        const canEdit = QualityStorageSync.canEdit8D(r, user);
+
+        tr.innerHTML = `
+          <td>
+            <a href="#" onclick="window.open8DReport('${r.id}')" style="color:var(--qs-primary); font-weight:700; text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
+              <span>📑</span> ${r.report_number}
+            </a><br>
+            <small style="color:var(--qs-text-muted); font-size:0.7rem;">${r.report_date}</small>
+          </td>
+          <td>
+            <div style="font-weight:700; color:var(--qs-text-main); font-size:0.8rem;">
+              ${r.plant_name ? r.plant_name.split('—')[1]?.trim() || r.plant_name : 'Plant 1'}
+            </div>
+            <small style="color:var(--qs-text-muted); font-size:0.7rem;">${r.customer_name || 'Internal'}</small>
+          </td>
+          <td>
+            <strong>${r.part_number}</strong><br>
+            <small style="color:var(--qs-text-muted);">${r.part_name || 'Component'} (${r.project_code || 'N/A'})</small>
+          </td>
+          <td>
+            <div style="font-weight:700; color:var(--qs-primary); font-size:0.8rem;">
+              👤 ${r.assigned_lead_name || r.d1_champion || 'Quality Team'}
+            </div>
+            ${r.assigned_lead_user_id === user.id ? '<span style="font-size:0.65rem; background:var(--qs-primary-surface); color:var(--qs-primary); padding:1px 5px; border-radius:4px; font-weight:bold;">ASSIGNED TO YOU</span>' : ''}
+          </td>
+          <td>
+            <span class="badge ${isClosed ? 'badge-success' : 'badge-warning'}">
+              ${isClosed ? '🟢 Closed & Frozen' : '🟡 In Progress'}
+            </span>
+          </td>
+          <td style="text-align:right;">
+            <button class="btn ${canEdit ? 'btn-primary' : 'btn-ghost'}" onclick="window.open8DReport('${r.id}')" style="font-size:0.75rem; padding:4px 10px;">
+              ${canEdit ? '✏️ Edit Workspace' : '👁️ View Report'}
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+      updateKpis();
+    }
+
+    window.open8DReport = function(id) {
+      const reports = QualityStorageSync.getState().eightDReports || [];
+      const report = reports.find(r => r.id === id || r.report_number === id);
+      if (report) {
+        active8DId = report.id;
+        document.getElementById('eightd-form-title').innerText = `8D Workspace: ${report.report_number}`;
+        window.eightDEngine.setReport(report);
+        switchView('8d-form');
+      }
+    };
+
+    window.handle8DToggle = async function(recordId, isRequiredStr) {
+      const isReq = isRequiredStr === 'true';
+      const updated = await QualityStorageSync.toggle8DRequirement(recordId, isReq);
+      if (updated && updated.eight_d_report_id) {
+        if (window.showCustomToast) {
+          window.showCustomToast(`8D Report ${updated.eight_d_number} initiated and linked to ${recordId}!`, 'success');
+        } else if (window.showCustomAlert) {
+          await window.showCustomAlert('8D Initiated', `8D Report ${updated.eight_d_number} initiated and linked to ${recordId}!`, 'success');
+        }
+        FailureRegisterManager.render();
+      } else {
+        FailureRegisterManager.render();
+      }
+    };
+
+    function createNew8D() {
+      const year = new Date().getFullYear();
+      const num = '8D-' + year + '-' + String(Math.floor(1000 + Math.random() * 9000));
+      const report = {
+        id: num,
+        report_number: num,
+        report_date: new Date().toISOString().split('T')[0],
+        customer_name: '',
+        project_code: '',
+        part_number: '',
+        part_name: '',
+        status: 'Open',
+        is_frozen: false,
+        d4_data_5why: { chains: [] }
+      };
+      QualityStorageSync.getState().eightDReports.unshift(report);
+      window.open8DReport(num);
+    }
+
+    async function saveActive8D() {
+      const formData = window.eightDEngine.collectFormData();
+      if (!formData) return;
+      await QualityStorageSync.save8DReport(formData);
+      if (window.showCustomToast) {
+        window.showCustomToast('8D Report saved successfully!', 'success');
+      } else if (window.showCustomAlert) {
+        await window.showCustomAlert('8D Saved', '8D Report saved successfully!', 'success');
+      }
+    }
+
+    // Single-Screen Safe Navigation State Check
+    function isQualityWorkspaceDirty() {
+      try {
+        const formView = document.getElementById('view-8d-form');
+        if (formView && formView.classList.contains('active') && window.eightDEngine && window.eightDEngine.currentReport) {
+          if (!window.eightDEngine.currentReport.is_frozen) {
+            const currentData = window.eightDEngine.collectFormData();
+            const orig = window.eightDEngine.currentReport;
+            if (JSON.stringify(currentData) !== JSON.stringify(orig)) return true;
+          }
+        }
+        const failureDesc = document.getElementById('failure_description');
+        if (failureDesc && failureDesc.value.trim() !== '') {
+          const logView = document.getElementById('view-log');
+          if (logView && logView.classList.contains('active')) return true;
+        }
+      } catch (e) { }
+      return false;
+    }
+
+    async function saveQualityDraft() {
+      try {
+        const formView = document.getElementById('view-8d-form');
+        if (formView && formView.classList.contains('active') && window.eightDEngine) {
+          await saveActive8D();
+        }
+      } catch (e) { }
+    }
+
+    // Modal Controls
+    function openRcaModal(id) { document.getElementById(id).style.display = 'flex'; }
+    function closeRcaModal(id) { document.getElementById(id).style.display = 'none'; }
+
+    window.open5W2HModal = () => openRcaModal('modal-5w2h');
+    window.openIsIsNotModal = () => openRcaModal('modal-isnot');
+    window.open5WhyModal = () => openRcaModal('modal-5why');
+    window.openFishboneModal = () => openRcaModal('modal-fishbone');
+
+    function apply5W2H() {
+      const fields = {
+        who: document.getElementById('w-who').value,
+        what: document.getElementById('w-what').value,
+        where: document.getElementById('w-where').value,
+        when: document.getElementById('w-when').value,
+        why: document.getElementById('w-why').value,
+        how: document.getElementById('w-how').value,
+        howmany: document.getElementById('w-howmany').value
+      };
+      const text = RcaTools.save5W2H(window.eightDEngine.currentReport, fields);
+      const d2 = document.getElementById('eightd-d2');
+      if (d2) d2.value = (d2.value ? d2.value + '\n\n' : '') + text;
+      closeRcaModal('modal-5w2h');
+    }
+
+    function applyIsIsNot() {
+      const dims = {
+        what_is: document.getElementById('isnot-what-is').value,
+        what_isnot: document.getElementById('isnot-what-isnot').value,
+        what_diff: document.getElementById('isnot-what-diff').value,
+        where_is: document.getElementById('isnot-where-is').value,
+        where_isnot: document.getElementById('isnot-where-isnot').value,
+        where_diff: document.getElementById('isnot-where-diff').value,
+        when_is: document.getElementById('isnot-when-is').value,
+        when_isnot: document.getElementById('isnot-when-isnot').value,
+        when_diff: document.getElementById('isnot-when-diff').value,
+        extent_is: document.getElementById('isnot-extent-is').value,
+        extent_isnot: document.getElementById('isnot-extent-isnot').value,
+        extent_diff: document.getElementById('isnot-extent-diff').value
+      };
+      const text = RcaTools.saveIsIsNot(window.eightDEngine.currentReport, dims);
+      const d2 = document.getElementById('eightd-d2');
+      if (d2) d2.value = (d2.value ? d2.value + '\n\n' : '') + text;
+      closeRcaModal('modal-isnot');
+    }
+
+    function switchWhyChainType(type) {
+      activeWhyChainType = type;
+      document.getElementById('fr-why-tab-occ').style.color = type === 'occ' ? 'var(--qs-primary)' : 'var(--qs-text-muted)';
+      document.getElementById('fr-why-tab-occ').style.borderBottom = type === 'occ' ? '2px solid var(--qs-primary)' : 'none';
+      document.getElementById('fr-why-tab-esc').style.color = type === 'esc' ? 'var(--qs-warning)' : 'var(--qs-text-muted)';
+      document.getElementById('fr-why-tab-esc').style.borderBottom = type === 'esc' ? '2px solid var(--qs-warning)' : 'none';
+    }
+
+    function apply5WhyChain() {
+      const chain = {
+        title: document.getElementById('why-title').value || (activeWhyChainType === 'occ' ? 'Occurrence Cause' : 'Escape Cause'),
+        type: activeWhyChainType,
+        why1: document.getElementById('why-1').value,
+        why2: document.getElementById('why-2').value,
+        why3: document.getElementById('why-3').value,
+        why4: document.getElementById('why-4').value,
+        why5: document.getElementById('why-5').value
+      };
+      RcaTools.add5WhyChain(window.eightDEngine.currentReport, chain);
+      window.eightDEngine.render();
+      closeRcaModal('modal-5why');
+    }
+
+    window.toggle5WhyRealCause = function(chainId) {
+      RcaTools.toggleRealRootCause(window.eightDEngine.currentReport, chainId);
+      window.eightDEngine.render();
+    };
+
+    window.delete5WhyChain = async function(chainId) {
+      let confirmed = true;
+      if (window.showCustomConfirm) {
+        confirmed = await window.showCustomConfirm('Delete 5-Why Chain', 'Are you sure you want to remove this 5-Why Analysis chain?', 'Delete Chain', 'Cancel', true);
+      } else {
+        confirmed = confirm('Delete this 5-Why Analysis chain?');
+      }
+      if (!confirmed) return;
+      RcaTools.delete5WhyChain(window.eightDEngine.currentReport, chainId);
+      window.eightDEngine.render();
+    };
+
+    function applyFishbone() {
+      const matrix = {
+        man: { text: document.getElementById('fb-man').value },
+        machine: { text: document.getElementById('fb-machine').value },
+        material: { text: document.getElementById('fb-material').value },
+        method: { text: document.getElementById('fb-method').value },
+        measurement: { text: document.getElementById('fb-measurement').value },
+        env: { text: document.getElementById('fb-env').value }
+      };
+      const text = RcaTools.saveFishbone(window.eightDEngine.currentReport, matrix);
+      const d4 = document.getElementById('eightd-d4');
+      if (d4) d4.value = (d4.value ? d4.value + '\n\n' : '') + text;
+      closeRcaModal('modal-fishbone');
+    }
+
+    // Lessons Learned Transfer
+    window.triggerLessonLearnedTransfer = function(eightDId) {
+      pendingTransfer8DId = eightDId;
+      LessonsLearnedManager.populateProductTaxonomyDropdown();
+      openRcaModal('modal-transfer-ll');
+    };
+
+    async function confirmLessonLearnedTransfer() {
+      const selectedTaxonomyId = document.getElementById('ll-transfer-product-taxonomy').value;
+      try {
+        const res = await QualityStorageSync.transfer8DToLessonLearned(pendingTransfer8DId, selectedTaxonomyId);
+        closeRcaModal('modal-transfer-ll');
+        if (window.showCustomToast) {
+          window.showCustomToast(`8D Report successfully captured as Lesson Learned ${res.id}!`, 'success', 5000);
+        } else if (window.showCustomAlert) {
+          await window.showCustomAlert('Lesson Learned Captured', `8D Report successfully frozen and captured as Lesson Learned ID: ${res.id} under classification "${res.product_classification_path}"!`, 'success');
+        }
+        window.open8DReport(pendingTransfer8DId);
+      } catch (err) {
+        if (window.showCustomAlert) {
+          await window.showCustomAlert('Transfer Failed', 'Error transferring to Lessons Learned: ' + err.message, 'error');
+        } else {
+          alert('Error transferring to Lessons Learned: ' + err.message);
+        }
+      }
+    }
+
+    function toggleObservedDropdown(e) {
+      if (e) e.stopPropagation();
+      const m = document.getElementById('observed-menu');
+      m.style.display = m.style.display === 'flex' ? 'none' : 'flex';
+    }
+
+    document.addEventListener('click', () => {
+      const m = document.getElementById('observed-menu');
+      if (m) m.style.display = 'none';
+    });
+  </script>
+</body>
+
+</html>
