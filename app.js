@@ -1,5 +1,5 @@
 
-function getDfmeaStructIdForCause(causeId) {
+function getProcessStepForCause(causeId) {
   const ctx = typeof getActiveFmeaData === 'function' ? getActiveFmeaData() : null;
   if (!ctx || !ctx.isPFMEA) return null;
 
@@ -31,7 +31,14 @@ function getDfmeaStructIdForCause(causeId) {
     const parent = getParentStructureNode(ctx.structure, structId);
     if (parent) pstep = (ctx.processSteps || []).find(ps => String(ps.id) === String(parent.id)) || parent;
   }
+  return pstep || null;
+}
+window.getProcessStepForCause = getProcessStepForCause;
 
+function getDfmeaStructIdForCause(causeId) {
+  const ctx = typeof getActiveFmeaData === 'function' ? getActiveFmeaData() : null;
+  if (!ctx || !ctx.isPFMEA) return null;
+  const pstep = getProcessStepForCause(causeId);
   return (pstep && pstep.dfmeaStructId) || ctx.dfmeaStructId || null;
 }
 window.getDfmeaStructIdForCause = getDfmeaStructIdForCause;
@@ -2041,7 +2048,8 @@ async function handleLoginSubmit(e) {
       sharePointFileListCache = null;
       await loadSharePointCatalogFromDisk();
 
-      if (typeof window.openWorkspaceSelectorModal === 'function') {
+      // If Quality Suite is disabled by admin, skip the workspace selector and open FMEA directly
+      if (isQualitySuiteEnabled() && typeof window.openWorkspaceSelectorModal === 'function') {
         window.openWorkspaceSelectorModal(foundUser);
       } else {
         await openSharePointFileBrowserModal();
@@ -2774,24 +2782,80 @@ function getCurrentUserPermissions() {
   };
 }
 
-function checkCanEditFMEA() {
+function isFMEAReadOnlyOrNoRevInProgress() {
+  if (typeof currentFileLockMode !== 'undefined' && currentFileLockMode === 'READ_ONLY') return true;
+  if (typeof fmeaData !== 'undefined' && fmeaData && fmeaData.isReadOnly) return true;
+  const ctx = (typeof getActiveFmeaData === 'function') ? getActiveFmeaData() : null;
+  if (ctx && (ctx.isReadOnly || ctx.accessMode === 'READ_ONLY' || ctx.status === 'Frozen')) return true;
+  const perms = (typeof getCurrentUserPermissions === 'function') ? getCurrentUserPermissions() : null;
+  if (perms && perms.canEditFMEA === false) return true;
+  if (typeof currentUser !== 'undefined' && currentUser && (currentUser.role === 'Viewer' || (currentUser.username && currentUser.username.toLowerCase() === 'readonly'))) return true;
+  const cur = typeof getContextRevision === 'function' ? getContextRevision() : (typeof fmeaData !== 'undefined' ? fmeaData.currentRevision : null);
+  if (!cur) {
+    const revList = typeof getContextRevisionList === 'function' ? getContextRevisionList() : [];
+    if (revList && revList.length > 0) return true;
+    return false;
+  }
+  if (cur.status === 'Frozen' || (cur.status !== 'In Progress' && cur.status !== 'Draft')) {
+    return true;
+  }
+  return false;
+}
+window.isFMEAReadOnlyOrNoRevInProgress = isFMEAReadOnlyOrNoRevInProgress;
+
+function checkCanEditFMEA(silent = false) {
   if (typeof currentFileLockMode !== 'undefined' && currentFileLockMode === 'READ_ONLY') {
     const lockUser = (currentFileLockInfo && currentFileLockInfo.userProfile && currentFileLockInfo.userProfile.name) ? currentFileLockInfo.userProfile.name : 'another user';
     const lockMachine = (currentFileLockInfo && currentFileLockInfo.machineName) ? ` (${currentFileLockInfo.machineName})` : '';
-    if (typeof showToast === 'function') {
-      showToast(`🔒 Read-Only Mode: File is locked for editing by ${lockUser}${lockMachine}.`, 'warning');
-    } else {
-      alert(`Access Denied: This file is currently open in Read-Only Mode (locked by ${lockUser}${lockMachine}).`);
+    if (!silent) {
+      if (typeof showToast === 'function') {
+        showToast(`🔒 Read-Only Mode: File is locked for editing by ${lockUser}${lockMachine}.`, 'warning');
+      } else {
+        alert(`Access Denied: This file is currently open in Read-Only Mode (locked by ${lockUser}${lockMachine}).`);
+      }
     }
     return false;
   }
   const perms = getCurrentUserPermissions();
   if (perms.canEditFMEA === false) {
-    alert("Access Denied: Your user account rights do not permit editing FMEA data.");
+    if (!silent) alert("Access Denied: Your user account rights do not permit editing FMEA data.");
+    return false;
+  }
+  if (typeof currentUser !== 'undefined' && currentUser && (currentUser.role === 'Viewer' || (currentUser.username && currentUser.username.toLowerCase() === 'readonly'))) {
+    if (!silent) {
+      if (typeof showToast === 'function') {
+        showToast("🔒 Read-Only User: Your account rights do not permit editing.", "warning");
+      } else {
+        alert("Access Denied: Your account rights do not permit editing.");
+      }
+    }
+    return false;
+  }
+  const ctx = (typeof getActiveFmeaData === 'function') ? getActiveFmeaData() : null;
+  if ((ctx && (ctx.isReadOnly || ctx.accessMode === 'READ_ONLY' || ctx.status === 'Frozen')) || (typeof fmeaData !== 'undefined' && fmeaData && fmeaData.isReadOnly)) {
+    if (!silent) {
+      if (typeof showToast === 'function') {
+        showToast("🔒 Editing is disabled: Document is in Read-Only mode or frozen.", "warning");
+      } else {
+        alert("Access Denied: Document is in Read-Only mode or frozen.");
+      }
+    }
     return false;
   }
   let cur = typeof getContextRevision === 'function' ? getContextRevision() : (typeof fmeaData !== 'undefined' ? fmeaData.currentRevision : null);
   if (!cur) {
+    const revList = typeof getContextRevisionList === 'function' ? getContextRevisionList() : [];
+    if (revList && revList.length > 0) {
+      if (!silent) {
+        if (typeof showToast === 'function') {
+          showToast("🔒 Editing is disabled: No revision is currently in progress.", "warning");
+        } else {
+          alert("Editing is disabled: No revision is currently in progress.");
+        }
+        if (typeof openRevisionModal === 'function') openRevisionModal();
+      }
+      return false;
+    }
     const initRev = {
       id: 'rev-auto-1',
       revNumber: '01',
@@ -2805,9 +2869,15 @@ function checkCanEditFMEA() {
     else if (typeof fmeaData !== 'undefined') fmeaData.currentRevision = initRev;
     cur = initRev;
   }
-  if (cur && cur.status === 'Frozen') {
-    alert("Editing is disabled. Current revision is FROZEN.");
-    if (typeof openRevisionModal === 'function') openRevisionModal();
+  if (cur && (cur.status === 'Frozen' || (cur.status !== 'In Progress' && cur.status !== 'Draft'))) {
+    if (!silent) {
+      if (typeof showToast === 'function') {
+        showToast(`🔒 Editing is disabled: Current revision is ${cur.status || 'Frozen'} (not in progress).`, "warning");
+      } else {
+        alert(`Editing is disabled: Current revision is ${cur.status || 'Frozen'}.`);
+      }
+      if (typeof openRevisionModal === 'function') openRevisionModal();
+    }
     return false;
   }
   return true;
@@ -3692,12 +3762,78 @@ function handleManualSettingsUpload(event) {
   reader.readAsText(file);
 }
 
+
+function isTransientInCharMatrixEnabled() {
+  if (typeof fmeaData !== 'undefined' && fmeaData && fmeaData.settings && typeof fmeaData.settings.enableTransientInCharMatrix === 'boolean') {
+    return fmeaData.settings.enableTransientInCharMatrix;
+  }
+  const saved = (typeof localStorage !== 'undefined') ? localStorage.getItem('jost_enable_transient_in_char_matrix') : null;
+  if (saved !== null) {
+    return saved === 'true';
+  }
+  return false;
+}
+window.isTransientInCharMatrixEnabled = isTransientInCharMatrixEnabled;
+
+function toggleTransientInCharMatrixAdmin(enabled) {
+  if (typeof fmeaData !== 'undefined' && fmeaData) {
+    fmeaData.settings = fmeaData.settings || {};
+    fmeaData.settings.enableTransientInCharMatrix = !!enabled;
+  }
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem('jost_enable_transient_in_char_matrix', enabled ? 'true' : 'false');
+  }
+  const chk = document.getElementById('settingEnableTransientInCharacteristicsMatrix');
+  if (chk) chk.checked = !!enabled;
+  const headerChk = document.getElementById('chkAdminToggleTransientInMatrix');
+  if (headerChk) headerChk.checked = !!enabled;
+  if (typeof renderCharacteristicsLinkageMatrix === 'function') {
+    renderCharacteristicsLinkageMatrix();
+  }
+}
+window.toggleTransientInCharMatrixAdmin = toggleTransientInCharMatrixAdmin;
+
+function isCharLinkageSourceSwitchEnabled() {
+  if (typeof fmeaData !== 'undefined' && fmeaData && fmeaData.settings && typeof fmeaData.settings.enableCharLinkageSourceSwitch === 'boolean') {
+    return fmeaData.settings.enableCharLinkageSourceSwitch;
+  }
+  const saved = (typeof localStorage !== 'undefined') ? localStorage.getItem('jost_enable_char_linkage_source_switch') : null;
+  if (saved !== null) {
+    return saved === 'true';
+  }
+  return false;
+}
+window.isCharLinkageSourceSwitchEnabled = isCharLinkageSourceSwitchEnabled;
+
+function toggleCharLinkageSourceSwitchAdmin(enabled) {
+  if (typeof fmeaData !== 'undefined' && fmeaData) {
+    fmeaData.settings = fmeaData.settings || {};
+    fmeaData.settings.enableCharLinkageSourceSwitch = !!enabled;
+  }
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem('jost_enable_char_linkage_source_switch', enabled ? 'true' : 'false');
+  }
+  const chk = document.getElementById('settingEnableCharLinkageSourceSwitch');
+  if (chk) chk.checked = !!enabled;
+  if (!enabled) {
+    window.activeCharLinkageSource = 'characteristics';
+  }
+  if (typeof renderCharacteristicsLinkageMatrix === 'function') {
+    renderCharacteristicsLinkageMatrix();
+  }
+}
+window.toggleCharLinkageSourceSwitchAdmin = toggleCharLinkageSourceSwitchAdmin;
+
 function populateAutoSaveAdminSettingsForm() {
   const settings = getAutoSaveSettings();
   if (document.getElementById('settingAutoSaveMode')) document.getElementById('settingAutoSaveMode').value = settings.autoSaveMode || 'activity';
   if (document.getElementById('settingAutoSaveInterval')) document.getElementById('settingAutoSaveInterval').value = settings.autoSaveIntervalMinutes || 1;
   if (document.getElementById('settingSharePointEnabled')) document.getElementById('settingSharePointEnabled').checked = !!settings.sharepointEnabled;
   if (document.getElementById('settingAdminConfigSharePointUrl')) document.getElementById('settingAdminConfigSharePointUrl').value = settings.adminConfigSharePointUrl || settings.sharepointSiteUrl || '';
+  const charLinkageSourceSwitchChk = document.getElementById('settingEnableCharLinkageSourceSwitch');
+  if (charLinkageSourceSwitchChk) {
+    charLinkageSourceSwitchChk.checked = isCharLinkageSourceSwitchEnabled();
+  }
   if (document.getElementById('settingCharLinkageSource')) {
     document.getElementById('settingCharLinkageSource').value = settings.charLinkageSource || (fmeaData && fmeaData.settings && fmeaData.settings.charLinkageSource) || 'characteristics';
   }
@@ -3806,6 +3942,28 @@ function saveAutoSaveAdminSettings(event) {
   if (sharePointLibraryEl) settings.sharepointLibraryPath = sharePointLibraryEl.value.trim();
   if (sharePointFileNameEl) settings.sharepointFileName = sharePointFileNameEl.value.trim() || 'Jost_FMEA_Master.json';
   if (sharePointClientIdEl) settings.sharepointClientId = sharePointClientIdEl.value.trim();
+  const transientMatrixChk = document.getElementById('settingEnableTransientInCharacteristicsMatrix');
+  if (transientMatrixChk) {
+    const isEn = transientMatrixChk.checked;
+    if (fmeaData) {
+      fmeaData.settings = fmeaData.settings || {};
+      fmeaData.settings.enableTransientInCharMatrix = isEn;
+    }
+    localStorage.setItem('jost_enable_transient_in_char_matrix', isEn ? 'true' : 'false');
+  }
+  const charLinkageSourceSwitchChk = document.getElementById('settingEnableCharLinkageSourceSwitch');
+  if (charLinkageSourceSwitchChk) {
+    const isEn = charLinkageSourceSwitchChk.checked;
+    settings.enableCharLinkageSourceSwitch = isEn;
+    if (fmeaData) {
+      fmeaData.settings = fmeaData.settings || {};
+      fmeaData.settings.enableCharLinkageSourceSwitch = isEn;
+    }
+    localStorage.setItem('jost_enable_char_linkage_source_switch', isEn ? 'true' : 'false');
+    if (!isEn) {
+      window.activeCharLinkageSource = 'characteristics';
+    }
+  }
   if (charLinkageSourceEl) {
     settings.charLinkageSource = charLinkageSourceEl.value;
     if (fmeaData) {
@@ -7862,6 +8020,9 @@ function runAppSplashScreenAnimation() {
           const role = (currentUser.role || '').toLowerCase();
           if (role === 'plant user') {
             window.location.href = 'FailureRegister.html?view=log';
+          } else if (!isQualitySuiteEnabled()) {
+            // Quality Suite disabled by admin: open FMEA module directly
+            if (typeof openSharePointFileBrowserModal === 'function') openSharePointFileBrowserModal();
           } else if (typeof window.openWorkspaceSelectorModal === 'function') {
             window.openWorkspaceSelectorModal(currentUser);
           }
@@ -14237,8 +14398,8 @@ function renderRequirementsModalContent() {
         <strong style="color:#cbd5e1; font-size:13px;">No requirements match current filter</strong>
         <p style="font-size:11px; margin-top:4px;">
           ${ctx.isPFMEA && primarySource === 'PFMEA'
-            ? 'No process requirements defined yet for this step. Add one using the form on the left.'
-            : 'No DFMEA requirements found for the selected tab. Try another tab or All Accessible.'}
+        ? 'No process requirements defined yet for this step. Add one using the form on the left.'
+        : 'No DFMEA requirements found for the selected tab. Try another tab or All Accessible.'}
         </p>
       </div>
     `;
@@ -16339,15 +16500,49 @@ function updateCauseFormLinkedCharsSummary(charIds) {
   }).join('');
 }
 
+function isTransientCharacteristic(c) {
+  if (!c) return false;
+  if (typeof c === 'string') {
+    const all = (typeof getAllCharacteristicObjectsInProject === 'function')
+      ? getAllCharacteristicObjectsInProject()
+      : [
+        ...(fmeaData.libraries?.characteristics || []),
+        ...(fmeaData.pfmeas ? fmeaData.pfmeas.flatMap(p => p.libraries?.characteristics || []) : [])
+      ];
+    const found = all.find(x => x && String(x.id) === String(c));
+    if (!found) return false;
+    c = found;
+  }
+  const app = c.applicability || (c.origin === 'PFMEA' ? 'PFMEA_PROCESS' : 'DFMEA');
+  return app === 'PFMEA_TRANSIENT' || c.applicability === 'PFMEA_TRANSIENT' || c.transient === true || c.type === 'Transient' || c.charType === 'Transient';
+}
+window.isTransientCharacteristic = isTransientCharacteristic;
+
 function openLinkCharacteristicsModalFromForm() {
   activeLinkingCauseId = 'CURRENT_FORM';
   const hiddenVal = document.getElementById('causeCharIdsHidden') ? document.getElementById('causeCharIdsHidden').value : '';
-  activeFormCharIds = hiddenVal ? hiddenVal.split(',').filter(Boolean) : [];
+  activeFormCharIds = (hiddenVal ? hiddenVal.split(',').filter(Boolean) : []).filter(id => !isTransientCharacteristic(id));
 
+  const activeScope = getActiveFmeaScope();
   const title = document.getElementById('linkCharacteristicsModalTitle');
   const subtitle = document.getElementById('linkCharacteristicsModalSubtitle');
-  if (title) title.textContent = 'Link Characteristics to Cause (New Form)';
-  if (subtitle) subtitle.textContent = 'Select characteristics from master library or add a new characteristic below.';
+  if (title) title.textContent = (activeScope === 'PFMEA') ? 'Link Process Characteristics to Cause (New Form)' : 'Link Characteristics to Cause (New Form)';
+  if (subtitle) subtitle.textContent = (activeScope === 'PFMEA') ? 'Select process characteristics from library or add a new process characteristic below.' : 'Select characteristics from master library or add a new characteristic below.';
+
+  const typeFilterSelect = document.getElementById('linkCharTypeFilter');
+  if (typeFilterSelect) {
+    if (activeScope === 'PFMEA') {
+      typeFilterSelect.value = 'PROCESS';
+      typeFilterSelect.disabled = true;
+      typeFilterSelect.title = 'Only Process Characteristics can be linked to process causes';
+      typeFilterSelect.style.display = '';
+    } else {
+      typeFilterSelect.value = 'ALL';
+      typeFilterSelect.disabled = false;
+      typeFilterSelect.title = '';
+      typeFilterSelect.style.display = 'none';
+    }
+  }
 
   resetMasterCharForm();
   populateLinkCharVariantFilterOptions();
@@ -16357,17 +16552,43 @@ function openLinkCharacteristicsModalFromForm() {
 
 function openLinkCharacteristicsModal(causeId) {
   activeLinkingCauseId = causeId;
+  const pstep = (typeof getProcessStepForCause === 'function') ? getProcessStepForCause(causeId) : null;
+  window.activeLinkCharProcessStep = pstep;
   if (typeof getDfmeaStructIdForCause === 'function') {
     window.activeLinkCharDfmeaStructId = getDfmeaStructIdForCause(causeId);
   }
   const causes = (typeof findCauseObjectEverywhere === 'function') ? findCauseObjectEverywhere(causeId) : [];
   const cause = causes[0] || (fmeaData.libraries?.causes || []).find(c => c.id === causeId);
-  activeFormCharIds = cause ? [...(cause.characteristicIds || [])] : [];
+  activeFormCharIds = (cause ? [...(cause.characteristicIds || [])] : []).filter(id => !isTransientCharacteristic(id));
 
   const title = document.getElementById('linkCharacteristicsModalTitle');
   const subtitle = document.getElementById('linkCharacteristicsModalSubtitle');
-  if (title) title.textContent = `Link Characteristics to Cause: ${cause ? cause.details : 'FMEA Cause'}`;
-  if (subtitle) subtitle.textContent = 'Check items to link to this cause across FMEA views.';
+  const activeScope = getActiveFmeaScope();
+  if (title) {
+    title.textContent = activeScope === 'PFMEA'
+      ? `Link Process Characteristics to Cause: ${cause ? cause.details : 'Process Cause'}`
+      : `Link Characteristics to Cause: ${cause ? cause.details : 'FMEA Cause'}`;
+  }
+  if (subtitle) {
+    subtitle.textContent = activeScope === 'PFMEA'
+      ? (pstep ? `Operation: ${pstep.stepNo ? pstep.stepNo + ' - ' : ''}${pstep.name}. Select Process Characteristics (Machine/Controls).` : 'Select or add Process Characteristics.')
+      : 'Check items to link to this cause across FMEA views.';
+  }
+
+  const typeFilterSelect = document.getElementById('linkCharTypeFilter');
+  if (typeFilterSelect) {
+    if (activeScope === 'PFMEA') {
+      typeFilterSelect.value = 'PROCESS';
+      typeFilterSelect.disabled = true;
+      typeFilterSelect.title = 'Only Process Characteristics can be linked to process causes';
+      typeFilterSelect.style.display = '';
+    } else {
+      typeFilterSelect.value = 'ALL';
+      typeFilterSelect.disabled = false;
+      typeFilterSelect.title = '';
+      typeFilterSelect.style.display = 'none';
+    }
+  }
 
   resetMasterCharForm();
   populateLinkCharVariantFilterOptions();
@@ -16410,64 +16631,77 @@ function renderMasterCharacteristicsList() {
   if (!fmeaData.libraries) fmeaData.libraries = {};
   if (!fmeaData.libraries.characteristics) fmeaData.libraries.characteristics = [];
 
+  // Remove pfmeaCharNoticeBox if present
+  const existingNotice = document.getElementById('pfmeaCharNoticeBox');
+  if (existingNotice) existingNotice.remove();
+
   const search = (document.getElementById('linkCharSearchInput')?.value || '').toLowerCase().trim();
   const varFilter = document.getElementById('linkCharVariantFilter')?.value || 'ALL';
   const checkFilter = document.getElementById('linkCharCheckFilter')?.value || 'ALL';
   const activeScope = getActiveFmeaScope();
 
-  let items = fmeaData.libraries.characteristics;
-
-  // Filter by element (structId) - characteristics created for another element are isolated
-  let causeStructId = null;
-  if (activeLinkingCauseId && activeLinkingCauseId !== 'CURRENT_FORM') {
-    const causeObj = (fmeaData.libraries.causes || []).find(c => c.id === activeLinkingCauseId);
-    if (causeObj) causeStructId = causeObj.structId;
+  const typeFilterSelect = document.getElementById('linkCharTypeFilter');
+  if (typeFilterSelect && activeScope === 'PFMEA') {
+    typeFilterSelect.value = 'PROCESS';
+    typeFilterSelect.disabled = true;
+    typeFilterSelect.title = 'Only Process Characteristics can be linked to process causes';
   }
-  const activeStructId = causeStructId || getStructIdForFailureMode(activeFailureModeId) || selectedStructureId;
-  if (activeStructId) {
-    items = items.filter(c => !c.structId || c.structId === activeStructId);
-  }
+  const typeFilter = typeFilterSelect?.value || (activeScope === 'PFMEA' ? 'PROCESS' : 'ALL');
 
-  // In DFMEA: show DFMEA characteristics
-  // In PFMEA: show ONLY Product Characteristics of THAT linked DFMEA element (no ancestors, no process characteristics)
-  if (activeScope === 'PFMEA') {
-    const targetDfmeaId = window.activeLinkCharDfmeaStructId || (typeof getDfmeaStructIdForCause === 'function' ? getDfmeaStructIdForCause(activeLinkingCauseId) : null);
-    items = items.filter(c => {
-      const app = c.applicability || (c.origin === 'PFMEA' ? 'PFMEA_PROCESS' : 'DFMEA');
-      const isProduct = app === 'DFMEA' || c.type === 'Product' || (!c.applicability && c.type !== 'Process' && c.origin !== 'PFMEA');
-      if (!isProduct) return false;
-      return targetDfmeaId && (String(c.structId) === String(targetDfmeaId) || String(c.elementId) === String(targetDfmeaId));
+  let allMasterChars = [...fmeaData.libraries.characteristics];
+  const ctx = (typeof getActiveFmeaData === 'function') ? getActiveFmeaData() : null;
+  if (ctx && ctx.isPFMEA && ctx.pfmea && ctx.pfmea.libraries && ctx.pfmea.libraries.characteristics) {
+    ctx.pfmea.libraries.characteristics.forEach(c => {
+      if (!allMasterChars.some(x => String(x.id) === String(c.id))) allMasterChars.push(c);
     });
+  }
 
-    // In PFMEA, process characteristics cannot be added from here
-    const charForm = document.getElementById('masterCharForm');
-    const charTitle = document.getElementById('charFormTitle');
-    let pfNotice = document.getElementById('pfmeaCharNoticeBox');
-    if (!pfNotice && charForm && charForm.parentNode) {
-      pfNotice = document.createElement('div');
-      pfNotice.id = 'pfmeaCharNoticeBox';
-      pfNotice.style.cssText = 'padding:10px 12px; background:rgba(2,132,199,0.12); border:1px solid #0284c7; border-radius:6px; font-size:11px; color:#cbd5e1; line-height:1.5; margin-bottom:10px;';
-      charForm.parentNode.insertBefore(pfNotice, charForm);
-    }
-    if (pfNotice) {
-      pfNotice.style.display = 'block';
-      const dfmeaNode = targetDfmeaId && fmeaData.structure ? getStructureNodeById(fmeaData.structure, targetDfmeaId) : null;
-      const elemName = dfmeaNode ? (dfmeaNode.partNo ? dfmeaNode.partNo + ' - ' + dfmeaNode.name : dfmeaNode.name) : 'Linked DFMEA Element';
-      pfNotice.innerHTML = `<div style="font-weight:700; color:#38bdf8; margin-bottom:4px;">ℹ️ Link Product Characteristics</div><div>Only Product Characteristics from linked DFMEA element: <strong>${escapeHtml(elemName)}</strong> are displayed.</div><div style="margin-top:4px; font-size:10px; color:#94a3b8;">🔒 Process characteristics cannot be added from here.</div>`;
-    }
-    if (charForm) charForm.style.display = 'none';
-    if (charTitle) charTitle.textContent = 'Product Characteristics Scope';
-  } else {
-    const pfNotice = document.getElementById('pfmeaCharNoticeBox');
-    if (pfNotice) pfNotice.style.display = 'none';
-    const charForm = document.getElementById('masterCharForm');
+  const charForm = document.getElementById('masterCharForm');
+  const charTitle = document.getElementById('charFormTitle');
+  const submitBtn = document.getElementById('masterCharSubmitBtn');
+
+  let items = [];
+
+  if (activeScope === 'PFMEA') {
     if (charForm) charForm.style.display = 'flex';
-    const charTitle = document.getElementById('charFormTitle');
-    if (charTitle) charTitle.textContent = 'Available / Create Characteristic';
+    if (charTitle) charTitle.textContent = '+ Add Process Characteristic';
+    if (submitBtn) submitBtn.textContent = '+ Add Process Characteristic';
 
-    items = items.filter(c => {
+    const pstep = window.activeLinkCharProcessStep || (typeof getProcessStepForCause === 'function' ? getProcessStepForCause(activeLinkingCauseId) : null);
+    const pstepId = pstep ? String(pstep.id) : (activeLinkingCauseId ? String(activeLinkingCauseId) : null);
+
+    // Filter available characteristics in PFMEA scope: Process Characteristics only
+    items = allMasterChars.filter(c => {
+      const isProc = c.applicability === 'PFMEA_PROCESS' ||
+        c.applicability === 'PFMEA_TRANSIENT' ||
+        c.applicability === 'PFMEA' ||
+        c.origin === 'PFMEA' ||
+        c.type === 'Process';
+      if (!isProc) return false;
+      if (!pstepId) return true;
+      return !c.structId || !c.processStepId || String(c.structId) === pstepId || String(c.processStepId) === pstepId;
+    });
+  } else {
+    // DFMEA scope
+    if (charForm) charForm.style.display = 'flex';
+    if (charTitle) charTitle.textContent = '+ Add Master Characteristic';
+    if (submitBtn) submitBtn.textContent = '+ Add to Master Library';
+
+    let causeStructId = null;
+    if (activeLinkingCauseId && activeLinkingCauseId !== 'CURRENT_FORM') {
+      const causeObj = (fmeaData.libraries.causes || []).find(c => c.id === activeLinkingCauseId);
+      if (causeObj) causeStructId = causeObj.structId;
+    }
+    const activeStructId = causeStructId || getStructIdForFailureMode(activeFailureModeId) || selectedStructureId;
+
+    items = allMasterChars.filter(c => {
       const app = c.applicability || (c.origin === 'PFMEA' ? 'PFMEA_PROCESS' : 'DFMEA');
-      return app === 'DFMEA' || app === 'ALL';
+      const isDfmea = (app === 'DFMEA' || app === 'ALL');
+      if (!isDfmea) return false;
+      if (activeStructId && c.structId && c.structId !== 'GLOBAL') {
+        return c.structId === activeStructId;
+      }
+      return true;
     });
   }
 
@@ -16491,10 +16725,13 @@ function renderMasterCharacteristicsList() {
 
   // Filter by Checked / Unchecked Selection state
   if (checkFilter === 'CHECKED') {
-    items = items.filter(c => activeFormCharIds.includes(c.id));
+    items = items.filter(c => !isTransientCharacteristic(c) && activeFormCharIds.includes(c.id));
   } else if (checkFilter === 'UNCHECKED') {
-    items = items.filter(c => !activeFormCharIds.includes(c.id));
+    items = items.filter(c => isTransientCharacteristic(c) || !activeFormCharIds.includes(c.id));
   }
+
+  // Ensure activeFormCharIds never holds transient characteristics
+  activeFormCharIds = activeFormCharIds.filter(id => !isTransientCharacteristic(id));
 
   if (badge) {
     badge.textContent = `${activeFormCharIds.length} Selected`;
@@ -16507,7 +16744,9 @@ function renderMasterCharacteristicsList() {
 
   container.innerHTML = items.map(c => {
     ensureCharacteristicNumbers(c);
-    const isChecked = activeFormCharIds.includes(c.id);
+    const rawApp = c.applicability || (c.origin === 'PFMEA' ? 'PFMEA_PROCESS' : 'DFMEA');
+    const isTransient = isTransientCharacteristic(c);
+    const isChecked = !isTransient && activeFormCharIds.includes(c.id);
     const isProc = c.applicability === 'PFMEA_PROCESS' || c.applicability === 'PFMEA' || c.origin === 'PFMEA' || activeScope === 'PFMEA';
     const eff = isProc ? getEffectiveProcessCharClass(c) : null;
     const effectiveSymbol = eff ? eff.effectiveClass : (c.classSymbol || 'None');
@@ -16524,7 +16763,6 @@ function renderMasterCharacteristicsList() {
     }
 
     let appBadge = '';
-    const rawApp = c.applicability || (c.origin === 'PFMEA' ? 'PFMEA_PROCESS' : 'DFMEA');
     if (rawApp === 'PFMEA_TRANSIENT') {
       appBadge = `<span class="badge" style="background:#f59e0b; color:#1e293b; font-weight:700; font-size:9px; padding:1px 5px; margin-left:4px;" title="In-Process Transient Product Characteristic">⚡ Transient Product</span>`;
     } else if (rawApp === 'PFMEA_PROCESS' || rawApp === 'PFMEA') {
@@ -16549,10 +16787,11 @@ function renderMasterCharacteristicsList() {
     const canDeleteChar = !ctx.isPFMEA || !isDfmeaChar;
 
     return `
-      <div class="checkbox-card" style="display:flex; justify-content:space-between; align-items:center; background:${isChecked ? 'rgba(2, 132, 199, 0.12)' : '#1e293b'}; border:1px solid ${isChecked ? '#0284c7' : '#334155'}; padding:6px 10px; border-radius:6px; margin-bottom:4px;">
-        <label style="flex:1; cursor:pointer; font-size:11.5px; margin:0; color:#f8fafc;">
-          <input type="checkbox" id="chk_master_char_${c.id}" ${isChecked ? 'checked' : ''} onchange="toggleMasterCharSelection('${c.id}', this.checked)">
+      <div class="checkbox-card" style="display:flex; justify-content:space-between; align-items:center; background:${isChecked ? 'rgba(2, 132, 199, 0.12)' : (isTransient ? 'rgba(245, 158, 11, 0.04)' : '#1e293b')}; border:1px solid ${isChecked ? '#0284c7' : (isTransient ? '#78350f' : '#334155')}; padding:6px 10px; border-radius:6px; margin-bottom:4px; ${isTransient ? 'opacity:0.85;' : ''}">
+        <label style="flex:1; cursor:${isTransient ? 'not-allowed' : 'pointer'}; font-size:11.5px; margin:0; color:#f8fafc;" ${isTransient ? 'title="Transient characteristics cannot be linked to failure causes"' : ''}>
+          <input type="checkbox" id="chk_master_char_${c.id}" ${isChecked ? 'checked' : ''} ${isTransient ? 'disabled style="cursor:not-allowed; opacity:0.4;" title="Transient characteristics cannot be linked to failure causes"' : `onchange="toggleMasterCharSelection('${c.id}', this.checked)"`}>
           ${sysNoBadge}${userNoBadge}${classBadge}<strong style="">${escapeHtml(c.name)}</strong>${appBadge}${opBadge}${dwgHtml}
+          ${isTransient ? '<span style="font-size:9px; color:#f59e0b; font-style:italic; margin-left:6px; background:rgba(245,158,11,0.1); border:1px solid #b45309; padding:1px 4px; border-radius:3px;">Cannot link to cause</span>' : ''}
           ${derivedNoteHtml}
           ${specHtml}
           <br><small style="color:#94a3b8; font-size:10px;">Variants: ${escapeHtml(varNames)}</small>
@@ -16570,6 +16809,17 @@ function renderMasterCharacteristicsList() {
 }
 
 function toggleMasterCharSelection(id, checked) {
+  if (isTransientCharacteristic(id)) {
+    activeFormCharIds = activeFormCharIds.filter(x => x !== id);
+    const chk = document.getElementById(`chk_master_char_${id}`);
+    if (chk) {
+      chk.checked = false;
+      chk.disabled = true;
+    }
+    const badge = document.getElementById('linkCharSelectedCountBadge');
+    if (badge) badge.textContent = `${activeFormCharIds.length} Selected`;
+    return;
+  }
   if (checked) {
     if (!activeFormCharIds.includes(id)) activeFormCharIds.push(id);
   } else {
@@ -16607,16 +16857,16 @@ function resetMasterCharForm() {
     classSelect.innerHTML = renderClassLibraryOptionsHtml('None', { includeNone: true, showWeight: true });
   }
 
+  const activeScope = getActiveFmeaScope();
   const title = document.getElementById('charFormTitle');
-  if (title) title.textContent = '+ Add Master Characteristic';
+  if (title) title.textContent = (activeScope === 'PFMEA') ? '+ Add Process Characteristic' : '+ Add Master Characteristic';
 
   const submitBtn = document.getElementById('masterCharSubmitBtn');
-  if (submitBtn) submitBtn.textContent = '+ Add to Master Library';
+  if (submitBtn) submitBtn.textContent = (activeScope === 'PFMEA') ? '+ Add Process Characteristic' : '+ Add to Master Library';
 
   const resetBtn = document.getElementById('masterCharResetBtn');
   if (resetBtn) resetBtn.style.display = 'none';
 
-  const activeScope = getActiveFmeaScope();
   const appSelect = document.getElementById('masterCharApplicability');
 
   if (appSelect) {
@@ -16624,6 +16874,7 @@ function resetMasterCharForm() {
       appSelect.innerHTML = `
         <option value="PFMEA_PROCESS">Process Characteristic (PFMEA - Machine / Parameter Control)</option>
         <option value="PFMEA_TRANSIENT">Product Transient Characteristic (PFMEA - In-Process / Intermediate)</option>
+        <option value="DFMEA">Product Characteristic (DFMEA - Design Parameter)</option>
       `;
       appSelect.value = 'PFMEA_PROCESS';
     } else {
@@ -16680,14 +16931,20 @@ function saveMasterCharacteristic(e) {
   if (activeScope === 'PFMEA') {
     const ctx = (typeof getActiveFmeaData === 'function') ? getActiveFmeaData() : null;
     const activePfmea = ctx && ctx.pfmea ? ctx.pfmea : (fmeaData.pfmeas ? fmeaData.pfmeas.find(p => String(p.id) === String(fmeaData.activePfmeaId)) : null);
-    const activeOpId = window.selectedProcessStepId || (editId ? (fmeaData.libraries.characteristics.find(c => c.id === editId)?.processStepId) : null);
-
-    if (activeOpId) {
-      const op = (activePfmea && activePfmea.processSteps || []).find(p => String(p.id) === String(activeOpId));
-      if (op) {
-        processStepId = op.id;
-        processStepNo = op.stepNo || '';
-        processStepName = op.name || '';
+    const pstep = window.activeLinkCharProcessStep || (typeof getProcessStepForCause === 'function' ? getProcessStepForCause(activeLinkingCauseId) : null);
+    if (pstep) {
+      processStepId = pstep.id;
+      processStepNo = pstep.stepNo || '';
+      processStepName = pstep.name || '';
+    } else {
+      const activeOpId = window.selectedProcessStepId || (editId ? (fmeaData.libraries.characteristics.find(c => c.id === editId)?.processStepId) : null);
+      if (activeOpId) {
+        const op = (activePfmea && activePfmea.processSteps || []).find(p => String(p.id) === String(activeOpId));
+        if (op) {
+          processStepId = op.id;
+          processStepNo = op.stepNo || '';
+          processStepName = op.name || '';
+        }
       }
     }
   }
@@ -16697,7 +16954,10 @@ function saveMasterCharacteristic(e) {
     const causeObj = (fmeaData.libraries.causes || []).find(c => c.id === activeLinkingCauseId);
     if (causeObj) causeStructId = causeObj.structId;
   }
-  const activeStructId = causeStructId || getStructIdForFailureMode(activeFailureModeId) || selectedStructureId;
+  const activeStructId = processStepId || causeStructId || getStructIdForFailureMode(activeFailureModeId) || selectedStructureId;
+  const isProcessApp = (applicability === 'PFMEA_PROCESS' || applicability === 'PFMEA_TRANSIENT' || applicability === 'PFMEA');
+  const assignedType = isProcessApp ? 'Process' : 'Product';
+  const assignedOrigin = (activeScope === 'PFMEA') ? 'PFMEA' : 'DFMEA';
 
   if (editId) {
     const targets = getAllCharacteristicObjectsInProject().filter(c => c && String(c.id) === String(editId));
@@ -16709,6 +16969,8 @@ function saveMasterCharacteristic(e) {
       item.drawingNo = drawingNo;
       item.classSymbol = classSymbol;
       item.applicability = applicability;
+      item.type = assignedType;
+      if (activeScope === 'PFMEA') item.origin = 'PFMEA';
       if (processStepId) {
         item.processStepId = processStepId;
         item.processStepNo = processStepNo;
@@ -16718,6 +16980,9 @@ function saveMasterCharacteristic(e) {
       item.variantId = selectedVars;
       if (activeStructId) item.structId = activeStructId;
     });
+    if (applicability === 'PFMEA_TRANSIENT') {
+      activeFormCharIds = activeFormCharIds.filter(x => x !== editId);
+    }
   } else {
     const newId = 'char-' + Date.now();
     const sysCharNo = generateTimeBasedSystemCharNo({ id: newId });
@@ -16730,6 +16995,8 @@ function saveMasterCharacteristic(e) {
       drawingNo,
       classSymbol,
       applicability,
+      type: assignedType,
+      origin: assignedOrigin,
       processStepId,
       processStepNo,
       processStepName,
@@ -16738,7 +17005,9 @@ function saveMasterCharacteristic(e) {
       structId: activeStructId
     };
     fmeaData.libraries.characteristics.push(newChar);
-    if (!activeFormCharIds.includes(newChar.id)) activeFormCharIds.push(newChar.id);
+    if (applicability !== 'PFMEA_TRANSIENT' && !activeFormCharIds.includes(newChar.id)) {
+      activeFormCharIds.push(newChar.id);
+    }
   }
 
   resetMasterCharForm();
@@ -16776,8 +17045,9 @@ function editMasterCharacteristic(id) {
       appSelect.innerHTML = `
         <option value="PFMEA_PROCESS">Process Characteristic (PFMEA - Machine / Parameter Control)</option>
         <option value="PFMEA_TRANSIENT">Product Transient Characteristic (PFMEA - In-Process / Intermediate)</option>
+        <option value="DFMEA">Product Characteristic (DFMEA - Design Parameter)</option>
       `;
-      appSelect.value = item.applicability === 'PFMEA_TRANSIENT' ? 'PFMEA_TRANSIENT' : 'PFMEA_PROCESS';
+      appSelect.value = item.applicability || 'PFMEA_PROCESS';
     } else {
       appSelect.innerHTML = `
         <option value="DFMEA">Product Characteristic (DFMEA - Design Parameter)</option>
@@ -16787,10 +17057,10 @@ function editMasterCharacteristic(id) {
   }
 
   const title = document.getElementById('charFormTitle');
-  if (title) title.textContent = 'Edit Master Characteristic';
+  if (title) title.textContent = (activeScope === 'PFMEA') ? 'Edit Process Characteristic' : 'Edit Master Characteristic';
 
   const submitBtn = document.getElementById('masterCharSubmitBtn');
-  if (submitBtn) submitBtn.textContent = 'Save Changes';
+  if (submitBtn) submitBtn.textContent = 'Update Characteristic';
 
   const resetBtn = document.getElementById('masterCharResetBtn');
   if (resetBtn) resetBtn.style.display = 'inline-block';
@@ -19788,7 +20058,7 @@ function buildRowContextsForContext(ctx, targetStructureId = null, applyVariantF
           const det = parseInt(cause.detection) || 1;
           const rpn = effSev * occ * det;
           const ap = calculateAIAGVDA_AP(effSev, occ, det, causeClassSym);
-          const evalDisp = isVDA ? (ap === 'H' ? 'High (H)' : (ap === 'M' ? 'Med (M)' : 'Low (L)')) : String(rpn);
+          const evalDisp = isVDA ? ap : String(rpn);
 
           const actIds = (ctx.causeActions || {})[cause.id] || [];
           const linkedActions = (fmeaData.libraries && fmeaData.libraries.actions || []).filter(a => actIds.includes(a.id));
@@ -19829,7 +20099,7 @@ function buildRowContextsForContext(ctx, targetStructureId = null, applyVariantF
               const d2 = parseInt(cause.d2) || det;
               const rpn2 = act.detail ? (s2 * o2 * d2) : '-';
               const ap2 = act.detail ? calculateAIAGVDA_AP(s2, o2, d2) : '-';
-              const evalDisp2 = act.detail ? (isVDA ? (ap2 === 'H' ? 'High (H)' : (ap2 === 'M' ? 'Med (M)' : 'Low (L)')) : String(rpn2)) : '-';
+              const evalDisp2 = act.detail ? (isVDA ? (ap2) : String(rpn2)) : '-';
 
               rows.push({
                 struct: structName,
@@ -20132,7 +20402,8 @@ function getUniqueValuesForCharLinkageColumn(colKey) {
       } else {
         values.add('✅ Linked');
       }
-      if (ch.nature === 'PFMEA_TRANSIENT' || links.some(l => l.nature === 'PFMEA_TRANSIENT')) {
+      const allowTransientForStatus = (typeof isTransientInCharMatrixEnabled === 'function') ? isTransientInCharMatrixEnabled() : false;
+      if (allowTransientForStatus && (ch.nature === 'PFMEA_TRANSIENT' || links.some(l => l.nature === 'PFMEA_TRANSIENT'))) {
         values.add('⚡ Transient');
       }
     }
@@ -20703,9 +20974,9 @@ function renderCauseFormattedCell(cause, idx) {
 function renderRiskTdHTML(isVDA, maxSeverity, occ, det, rpn, ap, rowspan = 1, extraAttrs = '') {
   if (isVDA) {
     let riskClass = 'rpn-risk-low';
-    let text = 'Low (L)';
-    if (ap === 'H') { riskClass = 'rpn-risk-high'; text = 'High (H)'; }
-    else if (ap === 'M') { riskClass = 'rpn-risk-med'; text = 'Med (M)'; }
+    let text = 'L';
+    if (ap === 'H') { riskClass = 'rpn-risk-high'; text = 'H'; }
+    else if (ap === 'M') { riskClass = 'rpn-risk-med'; text = 'M'; }
     return `<td ${extraAttrs} rowspan="${rowspan}" class="rpn-cell-full ${riskClass}">${text}</td>`;
   } else {
     let riskClass = 'rpn-risk-low';
@@ -24110,11 +24381,25 @@ function initCtrlDblClickListeners() {
     e.preventDefault();
     e.stopPropagation();
 
+    if (typeof isFMEAReadOnlyOrNoRevInProgress === 'function' && isFMEAReadOnlyOrNoRevInProgress()) {
+      if (typeof showToast === 'function') {
+        showToast('🔒 Quick edit is disabled in read-only mode or when revision is not in progress.', 'warning');
+      }
+      return;
+    }
+    if (typeof checkCanEditFMEA === 'function' && !checkCanEditFMEA()) return;
+
     handleCtrlDblClickFMEACell(e, td);
   }, true);
 }
 
 function handleCtrlDblClickFMEACell(e, td) {
+  if (typeof isFMEAReadOnlyOrNoRevInProgress === 'function' && isFMEAReadOnlyOrNoRevInProgress()) {
+    if (typeof showToast === 'function') {
+      showToast('🔒 Quick edit is disabled in read-only mode or when revision is not in progress.', 'warning');
+    }
+    return;
+  }
   if (typeof checkCanEditFMEA === 'function' && !checkCanEditFMEA()) return;
 
   const reqContainer = e.target.closest('[data-cell-type="req"], .cell-dbl-click-hint[title*="requirement"], .cell-dbl-click-hint[title*="characteristic"]');
@@ -24203,6 +24488,14 @@ function handleCtrlDblClickFMEACell(e, td) {
 }
 
 function openQuickFieldEditModal(type, params) {
+  if (typeof isFMEAReadOnlyOrNoRevInProgress === 'function' && isFMEAReadOnlyOrNoRevInProgress()) {
+    if (typeof showToast === 'function') {
+      showToast('🔒 Editing is disabled in read-only mode or when revision is not in progress.', 'warning');
+    }
+    return;
+  }
+  if (typeof checkCanEditFMEA === 'function' && !checkCanEditFMEA()) return;
+
   const ctx = getActiveFmeaData();
   const modal = document.getElementById('quickFieldEditModal');
   if (!modal) return;
@@ -25733,7 +26026,7 @@ function renderFMEATable(force = false) {
           const rpn = (maxSeverity !== '-' && hasValidCause) ? (effSev * (parseInt(cause.occurrence) || 10) * (parseInt(cause.detection) || 10)) : '-';
 
           const ap = (maxSeverity !== '-' && hasValidCause) ? calculateAIAGVDA_AP(effSev, parseInt(cause.occurrence) || 10, parseInt(cause.detection) || 10, causeClassSym) : '-';
-          const evalDispPlain = isVDA ? (ap === 'H' ? 'High (H)' : (ap === 'M' ? 'Med (M)' : (ap === 'L' ? 'Low (L)' : '-'))) : (rpn !== '-' ? String(rpn) : '-');
+          const evalDispPlain = isVDA ? (ap === 'H' ? 'H' : (ap === 'M' ? 'M' : (ap === 'L' ? 'L' : '-'))) : (rpn !== '-' ? String(rpn) : '-');
 
           const highestClass = getHighestClassSymbolForCause(cause);
           const dblChar = isReadOnly ? '' : `ondblclick="openLinkCharacteristicsModal('${cause.id}')"`;
@@ -25790,7 +26083,7 @@ function renderFMEATable(force = false) {
               const d2 = parseInt(cause.d2) || det;
               const rpn2 = hasActiveActionDetail ? (s2 * o2 * d2) : '';
               const ap2 = hasActiveActionDetail ? calculateAIAGVDA_AP(s2, o2, d2) : '';
-              const evalDisp2Plain = hasActiveActionDetail ? (isVDA ? (ap2 === 'H' ? 'High (H)' : (ap2 === 'M' ? 'Med (M)' : 'Low (L)')) : String(rpn2)) : '-';
+              const evalDisp2Plain = hasActiveActionDetail ? (isVDA ? (ap2) : String(rpn2)) : '-';
 
               linkedActions.forEach((act, actIdx) => {
                 const actVarNames = getVariantNamesDisplay(act.variants || act.variantId);
@@ -25837,7 +26130,7 @@ function renderFMEATable(force = false) {
             const d2 = parseInt(cause.d2) || det;
             const rpn2 = hasActiveActionDetail ? (s2 * o2 * d2) : '';
             const ap2 = hasActiveActionDetail ? calculateAIAGVDA_AP(s2, o2, d2) : '';
-            const evalDisp2Plain = hasActiveActionDetail ? (isVDA ? (ap2 === 'H' ? 'High (H)' : (ap2 === 'M' ? 'Med (M)' : 'Low (L)')) : String(rpn2)) : '-';
+            const evalDisp2Plain = hasActiveActionDetail ? (isVDA ? ap2 : String(rpn2)) : '-';
 
             causeChars.forEach((charObj) => {
               const charCtrlIds = getControlsForCharacteristicOrCause(charObj.id, cause.id);
@@ -25978,23 +26271,47 @@ function renderFMEATable(force = false) {
 
       // Col 2: Function & Requirement
       if (r.isFirstRowForFunc) {
-        html += `
-        <td data-struct-id="${r.structNode.id}" data-fl-id="${r.flId}" data-func-id="${r.funcId}" data-cell-type="func" title="Variants: ${escapeHtml(r.funcVarNames)}" ${r.funcAttr} rowspan="${r.funcRowspan}" ${isReadOnly ? '' : `ondblclick="if (!event.target.closest('button, .badge-ref-sync, .func-link-req-btn, .cell-dbl-click-hint, input, textarea, .func-name-text')) { event.stopPropagation(); openFunctionModal('${r.structNode.id}', event); }"`}>
-          <div class="func-cell-container" style="display:flex; justify-content:space-between; align-items:flex-start; width:100%;">
-            <div style="display:flex; align-items:flex-start; gap:4px;">
-              <div>
-                <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                  ${isReadOnly ? '' : `<input type="checkbox" class="copy-select-chk" ${selectedFuncCopyIds && selectedFuncCopyIds.has(r.flId) ? 'checked' : ''} onclick="event.stopPropagation();" ondblclick="event.stopPropagation();" onchange="toggleCopySelectFunction('${r.flId}', '${r.funcId}', this)" title="Select Function for Copy / Move">`}
-                  <span class="func-name-text" style="font-weight:600; color:var(--text-primary); cursor:pointer;" ${isReadOnly ? '' : `ondblclick="editInlineCell(event, this, '${r.flId}', '${r.funcId}', 'funcName')"`} title="${isReadOnly ? '' : 'Double-click to edit Function name'}">${r.funcBadge}${escapeHtml(stripBadgeArtifacts(r.funcObj.name))}</span>
-                  ${r.funcObj.referenceId ? `<span class="badge-ref-sync" onclick="event.stopPropagation()" title="Bi-directional live reference (ID: ${r.funcObj.referenceId}). Synced across ${getReferenceCountForFunction(r.funcObj)} instances.">🔗 Ref${getReferenceCountForFunction(r.funcObj) > 1 ? ` (${getReferenceCountForFunction(r.funcObj)})` : ''}</span>` : ''}
-                </div>
-                ${(r.reqTextStr && r.reqTextStr !== '-') ? `<div class="cell-dbl-click-hint" ${dblReq(r.flId)} style="margin-top:4px; padding-top:3px; border-top:1px dashed rgba(2,132,199,0.3); color:#0284c7; font-size:11px; font-weight:600; text-align:left;" title="Double-click to link/edit requirements">📌 ${r.reqBadge}${r.reqTextStr}</div>` : `<div class="cell-dbl-click-hint" ${dblReq(r.flId)} style="margin-top:3px; color:#64748b; font-size:10px; font-style:italic; cursor:pointer;" title="Double-click to link requirements from catalogue">+ Link Requirement...</div>`}
+        const ifaceId = (r.funcObj && r.funcObj.interfaceId) || (r.fl && r.fl.interfaceId);
+        const ifaceInfo = ifaceId && typeof getInterfaceLinkInfo === 'function' ? getInterfaceLinkInfo(ifaceId, r.structNode.id) : null;
+        let ifaceBannerHtml = '';
+        if (ifaceInfo) {
+          const pairText = escapeHtml(ifaceInfo.formattedPair);
+          const icon = ifaceInfo.isExternal ? '🌐' : '🔗';
+          const counterpartTargetId = ifaceInfo.counterpartId || (ifaceInfo.isCurrentA ? ifaceInfo.elemBId : ifaceInfo.elemAId);
+          const counterpartDispName = escapeHtml(ifaceInfo.counterpartName || 'Connected Block');
+          ifaceBannerHtml = `
+            <div class="iface-function-banner" style="display:flex; align-items:center; justify-content:space-between; background:rgba(2, 132, 199, 0.12); border:1px solid rgba(56, 189, 248, 0.35); border-radius:4px; padding:3px 6px; margin-bottom:5px; gap:6px;">
+              <div style="display:flex; align-items:center; gap:5px; overflow:hidden; cursor:pointer; flex:1; min-width:0;" onclick="event.stopPropagation(); openInterfaceLinkEditorModal('${ifaceInfo.elemAId}', '${ifaceInfo.elemBId}', '${ifaceId}')" title="Click to view/edit interface linkage: ${pairText}">
+                <span style="font-size:11px;">${icon}</span>
+                <span style="font-size:10px; font-weight:700; color:#38bdf8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${pairText}">[${pairText}]</span>
               </div>
+              <button type="button" class="btn btn-xs" style="background:rgba(56, 189, 248, 0.18); border:1px solid #38bdf8; color:#38bdf8; font-size:9.5px; font-weight:700; padding:1px 6px; border-radius:3px; cursor:pointer; display:inline-flex; align-items:center; gap:3px; flex-shrink:0;" onclick="event.stopPropagation(); focusBoundaryDiagramElement('${counterpartTargetId}', '${ifaceId}')" title="Focus and scroll to connected block (${counterpartDispName}) in Boundary Diagram">
+                <span>🎯</span><span>Focus</span>
+              </button>
             </div>
-            <div style="display:inline-flex; align-items:center; gap:3px; flex-shrink:0;">
-              <button type="button" class="func-link-req-btn" style="font-size:10px; padding:1px 5px; background:rgba(2,132,199,0.15); color:#0284c7; border:1px solid rgba(2,132,199,0.4); border-radius:3px; cursor:pointer; font-weight:700;" onclick="openRequirementModal('${r.flId}')" title="Link / Manage Requirements for this Function">📌 Req</button>
-              ${netFnBtnHtml(r.flId, r.funcId)}
-              ${addFmBtnHtml(r.flId)}
+          `;
+        }
+
+        html += `
+        <td data-struct-id="${r.structNode.id}" data-fl-id="${r.flId}" data-func-id="${r.funcId}" data-cell-type="func" title="Variants: ${escapeHtml(r.funcVarNames)}" ${r.funcAttr} rowspan="${r.funcRowspan}" ${isReadOnly ? '' : `ondblclick="if (!event.target.closest('button, .badge-ref-sync, .func-link-req-btn, .cell-dbl-click-hint, input, textarea, .func-name-text, .iface-function-banner')) { event.stopPropagation(); openFunctionModal('${r.structNode.id}', event); }"`}>
+          <div class="func-cell-container" style="display:flex; flex-direction:column; width:100%; gap:3px;">
+            ${ifaceBannerHtml}
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; width:100%;">
+              <div style="display:flex; align-items:flex-start; gap:4px;">
+                <div>
+                  <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                    ${isReadOnly ? '' : `<input type="checkbox" class="copy-select-chk" ${selectedFuncCopyIds && selectedFuncCopyIds.has(r.flId) ? 'checked' : ''} onclick="event.stopPropagation();" ondblclick="event.stopPropagation();" onchange="toggleCopySelectFunction('${r.flId}', '${r.funcId}', this)" title="Select Function for Copy / Move">`}
+                    <span class="func-name-text" style="font-weight:600; color:var(--text-primary); cursor:pointer;" ${isReadOnly ? '' : `ondblclick="editInlineCell(event, this, '${r.flId}', '${r.funcId}', 'funcName')"`} title="${isReadOnly ? '' : 'Double-click to edit Function name'}">${r.funcBadge}${escapeHtml(stripBadgeArtifacts(r.funcObj.name))}</span>
+                    ${r.funcObj.referenceId ? `<span class="badge-ref-sync" onclick="event.stopPropagation()" title="Bi-directional live reference (ID: ${r.funcObj.referenceId}). Synced across ${getReferenceCountForFunction(r.funcObj)} instances.">🔗 Ref${getReferenceCountForFunction(r.funcObj) > 1 ? ` (${getReferenceCountForFunction(r.funcObj)})` : ''}</span>` : ''}
+                  </div>
+                  ${(r.reqTextStr && r.reqTextStr !== '-') ? `<div class="cell-dbl-click-hint" ${dblReq(r.flId)} style="margin-top:4px; padding-top:3px; border-top:1px dashed rgba(2,132,199,0.3); color:#0284c7; font-size:11px; font-weight:600; text-align:left;" title="Double-click to link/edit requirements">📌 ${r.reqBadge}${r.reqTextStr}</div>` : `<div class="cell-dbl-click-hint" ${dblReq(r.flId)} style="margin-top:3px; color:#64748b; font-size:10px; font-style:italic; cursor:pointer;" title="Double-click to link requirements from catalogue">+ Link Requirement...</div>`}
+                </div>
+              </div>
+              <div style="display:inline-flex; align-items:center; gap:3px; flex-shrink:0;">
+                <button type="button" class="func-link-req-btn" style="font-size:10px; padding:1px 5px; background:rgba(2,132,199,0.15); color:#0284c7; border:1px solid rgba(2,132,199,0.4); border-radius:3px; cursor:pointer; font-weight:700;" onclick="openRequirementModal('${r.flId}')" title="Link / Manage Requirements for this Function">📌 Req</button>
+                ${netFnBtnHtml(r.flId, r.funcId)}
+                ${addFmBtnHtml(r.flId)}
+              </div>
             </div>
           </div>
         </td>`;
@@ -26778,11 +27095,13 @@ function editInlineCell(eventOrTd, tdOrFlId, flIdOrFmId, fmIdOrField, fieldOrNul
     try { window.getSelection().removeAllRanges(); } catch (err) { }
   }
 
-  if (typeof checkCanEditFMEA === 'function' && !checkCanEditFMEA()) return;
-  if (fmeaData.currentRevision && fmeaData.currentRevision.status === 'Frozen') {
-    showToast("Editing is disabled. Current revision is FROZEN.", "warning");
+  if (typeof isFMEAReadOnlyOrNoRevInProgress === 'function' && isFMEAReadOnlyOrNoRevInProgress()) {
+    if (typeof showToast === 'function') {
+      showToast("🔒 Editing is disabled in read-only mode or when revision is not in progress.", "warning");
+    }
     return;
   }
+  if (typeof checkCanEditFMEA === 'function' && !checkCanEditFMEA()) return;
 
   if (!td || td.querySelector('input')) return;
 
@@ -29021,7 +29340,7 @@ function syncRevisionApprovalLogs() {
     if (logs.length > 500) logs = logs.slice(0, 500);
     try {
       localStorage.setItem('jost_shared_approval_logs', JSON.stringify(logs));
-    } catch (e) {}
+    } catch (e) { }
   }
   return logs.sort((a, b) => new Date(b.requestTimestamp || 0) - new Date(a.requestTimestamp || 0));
 }
@@ -29107,9 +29426,9 @@ function getPendingApprovalsForUser(user = null) {
     const appFullName = (l.approver.name || '').toLowerCase().trim();
     const appId = String(l.approver.id || l.approver.username || '').toLowerCase().trim();
     return (uEmail && uEmail === appEmail) ||
-           (uName && uName === appUsername) ||
-           (uFullName && uFullName === appFullName) ||
-           (uId && uId === appId);
+      (uName && uName === appUsername) ||
+      (uFullName && uFullName === appFullName) ||
+      (uId && uId === appId);
   });
 }
 
@@ -29130,9 +29449,9 @@ function checkUserApprovalPermission(curRev) {
   const appId = String(app.id || app.username || '').toLowerCase().trim();
 
   return (curEmail && curEmail === appEmail) ||
-         (curUsername && curUsername === appUsername) ||
-         (curFullName && curFullName === appFullName) ||
-         (curId && curId === appId);
+    (curUsername && curUsername === appUsername) ||
+    (curFullName && curFullName === appFullName) ||
+    (curId && curId === appId);
 }
 
 // 3. Directory Approver Selection & Reassignment
@@ -29455,7 +29774,7 @@ function selectApproverDirectoryItem(userId) {
 
 // Close approver dropdown on outside click
 if (typeof document !== 'undefined') {
-  document.addEventListener('click', function(e) {
+  document.addEventListener('click', function (e) {
     const container = document.getElementById('approverDirectoryListContainer');
     const input = document.getElementById('approverSearchInput');
     const btn = document.getElementById('btnToggleApproverDropdown');
@@ -29496,7 +29815,7 @@ async function submitRevisionForApproval() {
   const isRevising = _isRevisingApproverMode;
   let logId = (cur.approvalRequest && cur.approvalRequest.logId) ? cur.approvalRequest.logId : null;
   if (!logId) {
-    logId = `LOG-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Date.now().toString().slice(-4)}`;
+    logId = `LOG-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Date.now().toString().slice(-4)}`;
   }
 
   const cfg = getRevisionApprovalConfig();
@@ -30196,7 +30515,7 @@ function exportApprovalLogsToCSV() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `JOST_FMEA_Approval_Audit_Logs_${new Date().toISOString().slice(0,10)}.csv`;
+  a.download = `JOST_FMEA_Approval_Audit_Logs_${new Date().toISOString().slice(0, 10)}.csv`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -31404,6 +31723,156 @@ function openInterfaceMatrixModal() {
   openModal('interfaceMatrixModal');
 }
 
+
+function getInterfaceLinkInfo(ifaceId, currentStructId = null) {
+  if (!ifaceId || typeof fmeaData === 'undefined' || !fmeaData || !fmeaData.interfaceMatrix) return null;
+  const iface = fmeaData.interfaceMatrix.find(i => i.id === ifaceId);
+  if (!iface) return null;
+
+  const structNodes = (typeof getAllStructureNodesFlat === 'function')
+    ? getAllStructureNodesFlat(fmeaData.structure)
+    : (typeof getFlatStructureNodes === 'function' ? getFlatStructureNodes(fmeaData.structure) : []);
+  const extNodes = (fmeaData.boundaryDiagram && fmeaData.boundaryDiagram.externalNodes) || [];
+  const allNodes = [...structNodes, ...extNodes];
+
+  const nodeA = allNodes.find(n => n.id === iface.elementIdA);
+  const nodeB = allNodes.find(n => n.id === iface.elementIdB);
+
+  const isAExt = extNodes.some(n => n.id === iface.elementIdA);
+  const isBExt = extNodes.some(n => n.id === iface.elementIdB);
+
+  const nameA = nodeA ? (nodeA.partNo ? (nodeA.partNo + ' - ' + nodeA.name) : nodeA.name) : 'Element A';
+  const nameB = nodeB ? (nodeB.partNo ? (nodeB.partNo + ' - ' + nodeB.name) : nodeB.name) : 'Element B';
+
+  const shortNameA = nodeA ? (nodeA.name || (nodeA.partNo ? nodeA.partNo : 'Element A')) : 'Element A';
+  const shortNameB = nodeB ? (nodeB.name || (nodeB.partNo ? nodeB.partNo : 'Element B')) : 'Element B';
+
+  let dirSymbol = '↔';
+  const dirs = iface.typeDirections || {};
+  const allDirVals = Object.values(dirs);
+  if (allDirVals.includes('FROM_TO') && !allDirVals.includes('TO_FROM') && !allDirVals.includes('BOTH')) {
+    dirSymbol = '➔';
+  } else if (allDirVals.includes('TO_FROM') && !allDirVals.includes('FROM_TO') && !allDirVals.includes('BOTH')) {
+    dirSymbol = '⬅';
+  }
+
+  // Determine counterpart relative to currentStructId
+  let counterpartNode = null;
+  let isCurrentA = false;
+  if (currentStructId) {
+    if (String(currentStructId) === String(iface.elementIdA)) {
+      counterpartNode = nodeB;
+      isCurrentA = true;
+    } else if (String(currentStructId) === String(iface.elementIdB)) {
+      counterpartNode = nodeA;
+      isCurrentA = false;
+    }
+  }
+
+  const counterpartId = counterpartNode ? counterpartNode.id : (isCurrentA ? iface.elementIdB : (iface.elementIdA || iface.elementIdB));
+  const counterpartName = counterpartNode ? (counterpartNode.partNo ? (counterpartNode.partNo + ' - ' + counterpartNode.name) : counterpartNode.name) : (shortNameB || shortNameA);
+
+  const formattedPair = shortNameA + ' <-> ' + shortNameB;
+  const formattedPairArrow = shortNameA + ' ' + dirSymbol + ' ' + shortNameB;
+  const isExternal = isAExt || isBExt;
+
+  return {
+    iface,
+    elemAId: iface.elementIdA,
+    elemBId: iface.elementIdB,
+    nodeA,
+    nodeB,
+    nameA,
+    nameB,
+    shortNameA,
+    shortNameB,
+    dirSymbol,
+    formattedPair,
+    formattedPairArrow,
+    isExternal,
+    counterpartNode,
+    counterpartId,
+    counterpartName,
+    isCurrentA
+  };
+}
+window.getInterfaceLinkInfo = getInterfaceLinkInfo;
+
+function focusBoundaryDiagramElement(targetNodeId, ifaceId = null) {
+  if (typeof fmeaData === 'undefined' || !fmeaData || !fmeaData.structure) {
+    if (typeof showToast === 'function') showToast('⚠️ Please open an FMEA project first.', 'warning');
+    else alert('Please open an FMEA project first.');
+    return;
+  }
+
+  const ctx = typeof getActiveFmeaData === 'function' ? getActiveFmeaData() : fmeaData;
+  if (ctx && ctx.isPFMEA) {
+    if (typeof showToast === 'function') showToast('⚠️ Boundary Diagram is disabled in PFMEA mode.', 'warning');
+    else alert('Boundary Diagram is disabled in PFMEA mode.');
+    return;
+  }
+
+  // 1. Ensure target node is unhidden if hidden
+  if (fmeaData.boundaryDiagram) {
+    const nodes = fmeaData.boundaryDiagram.nodes || [];
+    const extNodes = fmeaData.boundaryDiagram.externalNodes || [];
+    const targetNode = [...nodes, ...extNodes].find(n => n.id === targetNodeId);
+    if (targetNode && targetNode.hidden) {
+      targetNode.hidden = false;
+      if (typeof showToast === 'function') showToast('👁️ Unhid block "' + targetNode.name + '" for Boundary focus.', 'info');
+    }
+  }
+
+  // 2. Open boundary diagram modal
+  if (typeof openBoundaryDiagramModal === 'function') {
+    openBoundaryDiagramModal();
+  } else if (typeof openModal === 'function') {
+    openModal('boundaryDiagramModal');
+  }
+
+  // 3. Center viewport on the target element and trigger pulse animation
+  setTimeout(() => {
+    if (typeof renderBoundaryDiagram === 'function') {
+      renderBoundaryDiagram();
+    }
+    if (typeof inspectBoundaryNode === 'function' && targetNodeId) {
+      inspectBoundaryNode(targetNodeId);
+    }
+
+    const container = document.getElementById('boundaryCanvasContainer');
+    const nodeEl = document.getElementById('boundary-node-' + targetNodeId);
+
+    if (container && nodeEl) {
+      const cRect = container.getBoundingClientRect();
+      const nRect = nodeEl.getBoundingClientRect();
+
+      const scrollLeft = container.scrollLeft + (nRect.left - cRect.left) - (cRect.width / 2) + (nRect.width / 2);
+      const scrollTop = container.scrollTop + (nRect.top - cRect.top) - (cRect.height / 2) + (nRect.height / 2);
+
+      container.scrollTo({
+        left: Math.max(0, scrollLeft),
+        top: Math.max(0, scrollTop),
+        behavior: 'smooth'
+      });
+
+      nodeEl.classList.remove('boundary-focus-pulse');
+      void nodeEl.offsetWidth;
+      nodeEl.classList.add('boundary-focus-pulse');
+
+      if (typeof showToast === 'function') {
+        const titleEl = nodeEl.querySelector('.boundary-node-name') || nodeEl.querySelector('div:nth-child(2)');
+        const blockName = titleEl ? titleEl.textContent.trim() : 'Element';
+        showToast('🎯 Focused on "' + blockName + '" in Boundary Diagram', 'success');
+      }
+    } else if (container) {
+      if (typeof showToast === 'function') {
+        showToast('🎯 Opened Boundary Diagram for Interface', 'info');
+      }
+    }
+  }, 220);
+}
+window.focusBoundaryDiagramElement = focusBoundaryDiagramElement;
+
 function getInterfaceTypeBadgeHtml(type, compact = false) {
   let bg = '#3b82f6', code = 'E';
   if (type === 'Mechanical') { bg = '#64748b'; code = 'M'; }
@@ -31807,7 +32276,7 @@ function renderInterfaceTypeFunctionsEditor(initialData = null, initialTypeDirec
       funcs = currentDomData[type];
     } else {
       const freshFnId = 'fn-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
-      funcs = [{ id: freshFnId, name: `${type} Interface Function`, spec: '' }];
+      funcs = [{ id: freshFnId, name: `${type} Interface Function [${shortNameA} <-> ${shortNameB}]`, spec: '' }];
     }
 
     const dirVal = (initialTypeDirections && initialTypeDirections[type]) || (currentDomDirections && currentDomDirections[type]) || 'BOTH';
@@ -31846,7 +32315,7 @@ function renderInterfaceTypeFunctionsEditor(initialData = null, initialTypeDirec
       const rowFnId = f.id || ('fn-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7));
       return `
           <div class="iface-func-row" data-fnid="${rowFnId}" style="display:flex; gap:8px; align-items:center;">
-            <input type="text" class="form-control iface-func-name" style="background:#0f172a; border:1px solid #334155; color:#fff; font-size:11px; flex:2;" placeholder="${type} Function Name (e.g. Transmit Power / Signal)" value="${escapeHtml(f.name || '')}" required>
+            <input type="text" class="form-control iface-func-name" style="background:#0f172a; border:1px solid #334155; color:#fff; font-size:11px; flex:2;" placeholder="${type} Function Name (e.g. Transmit between ${escapeHtml(shortNameA)} & ${escapeHtml(shortNameB)})" value="${escapeHtml(f.name || '')}" required>
             <input type="text" class="form-control iface-func-spec" style="background:#0f172a; border:1px solid #334155; color:#cbd5e1; font-size:11px; flex:1;" placeholder="Spec / Requirement" value="${escapeHtml(f.spec || '')}">
             <button type="button" class="btn btn-xs btn-outline-danger" style="padding:3px 6px; font-size:10px;" onclick="removeInterfaceTypeFunctionRow(this)">🗑️</button>
           </div>
@@ -31863,13 +32332,18 @@ function addInterfaceTypeFunctionRow(type) {
   const list = container.querySelector(`.iface-func-list[data-type="${type}"]`);
   if (!list) return;
 
+  const nameA = document.getElementById('ifaceElemAName')?.textContent || 'Element A';
+  const nameB = document.getElementById('ifaceElemBName')?.textContent || 'Element B';
+  const shortNameA = nameA.length > 15 ? nameA.substring(0, 15) + '…' : nameA;
+  const shortNameB = nameB.length > 15 ? nameB.substring(0, 15) + '…' : nameB;
+
   const fnId = 'fn-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
   const row = document.createElement('div');
   row.className = 'iface-func-row';
   row.setAttribute('data-fnid', fnId);
   row.style.cssText = 'display:flex; gap:8px; align-items:center;';
   row.innerHTML = `
-    <input type="text" class="form-control iface-func-name" style="background:#0f172a; border:1px solid #334155; color:#fff; font-size:11px; flex:2;" placeholder="${type} Function Name" value="" required>
+    <input type="text" class="form-control iface-func-name" style="background:#0f172a; border:1px solid #334155; color:#fff; font-size:11px; flex:2;" placeholder="${type} Function Name (e.g. Transmit between ${escapeHtml(shortNameA)} & ${escapeHtml(shortNameB)})" value="" required>
     <input type="text" class="form-control iface-func-spec" style="background:#0f172a; border:1px solid #334155; color:#cbd5e1; font-size:11px; flex:1;" placeholder="Spec / Requirement" value="">
     <button type="button" class="btn btn-xs btn-outline-danger" style="padding:3px 6px; font-size:10px;" onclick="removeInterfaceTypeFunctionRow(this)">🗑️</button>
   `;
@@ -36810,6 +37284,7 @@ function updateBoundaryAddLinkageButtonState() {
 
     if (bar) {
       bar.style.display = 'flex';
+      if (typeof renderBoundaryConnectionsOnly === 'function') renderBoundaryConnectionsOnly();
       if (barText) {
         if (isBothExt) {
           barText.innerHTML = `<span style="color:#ef4444; font-weight:bold;">⚠️ Cannot connect 2 External Elements</span>: <strong>${escapeHtml(nameA)}</strong> & <strong>${escapeHtml(nameB)}</strong>`;
@@ -37873,11 +38348,7 @@ async function deleteBoundaryNode(nodeId) {
   renderBoundaryDiagram();
 }
 
-function exportBoundaryDiagramPNG() {
-  alert('Exporting Boundary Diagram PNG layout view...');
-  try { window.print(); } catch (e) { }
-  setTimeout(unlockApplicationPointerEvents, 200);
-}
+
 
 // ============================================================
 // HIDE / UNHIDE FEATURE
@@ -37921,42 +38392,86 @@ function hideAllBoundaryNodesExceptRoot() {
 }
 window.hideAllBoundaryNodesExceptRoot = hideAllBoundaryNodesExceptRoot;
 
+
+// ============================================================
+// HIERARCHICAL STRUCTURE TREE VISIBILITY PANEL & EXPORT ENGINES
+// ============================================================
+
 function renderBoundaryVisibilityPanel() {
   const panel = document.getElementById('boundaryVisibilityPanel');
   if (!panel) return;
 
   const nodes = fmeaData.boundaryDiagram ? (fmeaData.boundaryDiagram.nodes || []) : [];
   const extNodes = fmeaData.boundaryDiagram ? (fmeaData.boundaryDiagram.externalNodes || []) : [];
+  const diagramNodeMap = new Map();
+  nodes.forEach(n => diagramNodeMap.set(n.id, n));
 
-  if (nodes.length === 0 && extNodes.length === 0) {
-    panel.innerHTML = '<div style="font-size:11px;color:#64748b;">No blocks yet.</div>';
+  const root = (typeof getActiveFmeaData === 'function' && getActiveFmeaData()?.structure) || fmeaData?.structure;
+  if (!root && nodes.length === 0 && extNodes.length === 0) {
+    panel.innerHTML = '<div style="font-size:11px;color:#64748b;padding:8px;">No blocks yet.</div>';
     return;
   }
 
-  let html = '';
+  const renderedNodeIds = new Set();
 
-  nodes.forEach(node => {
-    const isHidden = !!node.hidden;
-    const isRoot = node.type === 'SYSTEM_ROOT';
-    const badgeColor = isRoot ? '#0284c7' : (node.type === 'SUBSYSTEM' ? '#059669' : '#475569');
-    html += `
-      <div style="display:flex; align-items:center; gap:6px; padding:5px 0; border-bottom:1px solid #1e293b;">
-        <button onclick="toggleBoundaryNodeVisibility('${node.id}')" title="${isHidden ? 'Show' : 'Hide'}" style="background:none;border:none;cursor:pointer;font-size:14px;padding:0;line-height:1;opacity:${isHidden ? 0.4 : 1};">${isHidden ? '🙈' : '👁️'}</button>
-        <span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:${badgeColor};color:#fff;text-transform:uppercase;flex-shrink:0;">${node.type || 'BLK'}</span>
-        <span style="font-size:11px;color:${isHidden ? '#475569' : '#cbd5e1'};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${isHidden ? 'text-decoration:line-through;' : ''}" title="${escapeHtml(node.name)}">${escapeHtml(node.name)}</span>
+  function renderTreeLevelHtml(node, depth = 0) {
+    if (!node) return '';
+    renderedNodeIds.add(node.id);
+    const diagramNode = diagramNodeMap.get(node.id) || node;
+    const isHidden = !!diagramNode.hidden;
+    const isRoot = (depth === 0);
+    const hasChildren = Array.isArray(node.children) && node.children.length > 0;
+    const nodeType = isRoot ? 'SYSTEM_ROOT' : (hasChildren ? 'SUBSYSTEM' : 'COMPONENT');
+    const badgeColor = isRoot ? '#0284c7' : (hasChildren ? '#059669' : '#475569');
+    const indentPx = depth * 14;
+
+    let rowHtml = `
+      <div style="display:flex; align-items:center; gap:6px; padding:4px 0 4px ${indentPx}px; border-bottom:1px solid #1e293b; transition:background 0.12s; border-radius:3px;" onmouseenter="this.style.background='rgba(59, 130, 246, 0.08)'" onmouseleave="this.style.background=''">
+        <button onclick="toggleBoundaryNodeVisibility('${node.id}')" title="${isHidden ? 'Show in diagram' : 'Hide from diagram'}" style="background:none;border:none;cursor:pointer;font-size:13px;padding:0;line-height:1;opacity:${isHidden ? 0.35 : 1};flex-shrink:0;">${isHidden ? '🙈' : '👁️'}</button>
+        ${depth > 0 ? `<span style="color:#475569; font-size:10px; font-family:monospace; user-select:none; flex-shrink:0;">└─</span>` : ''}
+        <span style="font-size:8.5px;font-weight:700;padding:1px 4px;border-radius:3px;background:${badgeColor};color:#fff;text-transform:uppercase;flex-shrink:0;">${nodeType === 'SYSTEM_ROOT' ? 'ROOT' : (nodeType === 'SUBSYSTEM' ? 'SUB' : 'COMP')}</span>
+        <span style="font-size:11px;font-weight:600;color:${isHidden ? '#475569' : '#cbd5e1'};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;${isHidden ? 'text-decoration:line-through;' : ''}" title="${escapeHtml(node.name)}${node.partNo ? ' (' + escapeHtml(node.partNo) + ')' : ''}" onclick="focusBoundaryDiagramElement('${node.id}')">${escapeHtml(node.name)}</span>
       </div>`;
-  });
+
+    if (hasChildren) {
+      node.children.forEach(child => {
+        rowHtml += renderTreeLevelHtml(child, depth + 1);
+      });
+    }
+    return rowHtml;
+  }
+
+  let html = `<div style="font-size:9px;font-weight:700;color:#38bdf8;text-transform:uppercase;letter-spacing:0.5px;padding:4px 0 4px;">🌳 System Structure Tree</div>`;
+
+  if (root) {
+    html += renderTreeLevelHtml(root, 0);
+  }
+
+  // Any orphaned nodes not in structure tree
+  const unrenderedNodes = nodes.filter(n => !renderedNodeIds.has(n.id));
+  if (unrenderedNodes.length > 0) {
+    unrenderedNodes.forEach(node => {
+      const isHidden = !!node.hidden;
+      const badgeColor = node.type === 'SUBSYSTEM' ? '#059669' : '#475569';
+      html += `
+        <div style="display:flex; align-items:center; gap:6px; padding:4px 0; border-bottom:1px solid #1e293b;">
+          <button onclick="toggleBoundaryNodeVisibility('${node.id}')" title="${isHidden ? 'Show' : 'Hide'}" style="background:none;border:none;cursor:pointer;font-size:13px;padding:0;line-height:1;opacity:${isHidden ? 0.35 : 1};">${isHidden ? '🙈' : '👁️'}</button>
+          <span style="font-size:8.5px;font-weight:700;padding:1px 4px;border-radius:3px;background:${badgeColor};color:#fff;text-transform:uppercase;flex-shrink:0;">${node.type || 'BLK'}</span>
+          <span style="font-size:11px;color:${isHidden ? '#475569' : '#cbd5e1'};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;${isHidden ? 'text-decoration:line-through;' : ''}" title="${escapeHtml(node.name)}" onclick="focusBoundaryDiagramElement('${node.id}')">${escapeHtml(node.name)}</span>
+        </div>`;
+    });
+  }
 
   if (extNodes.length > 0) {
-    html += `<div style="font-size:9px;font-weight:700;color:#a855f7;text-transform:uppercase;letter-spacing:0.5px;padding:6px 0 2px;">🌐 External Blocks</div>`;
+    html += `<div style="font-size:9px;font-weight:700;color:#a855f7;text-transform:uppercase;letter-spacing:0.5px;padding:10px 0 4px;">🌐 External Blocks (${extNodes.length})</div>`;
     extNodes.forEach(node => {
       const isHidden = !!node.hidden;
-      const typeDef = EXTERNAL_BLOCK_TYPES[node.externalType] || EXTERNAL_BLOCK_TYPES.CUSTOM;
+      const typeDef = (typeof EXTERNAL_BLOCK_TYPES !== 'undefined' && EXTERNAL_BLOCK_TYPES[node.externalType]) || (typeof EXTERNAL_BLOCK_TYPES !== 'undefined' && EXTERNAL_BLOCK_TYPES.CUSTOM) || { color: '#a855f7', emoji: '🌐' };
       html += `
-        <div style="display:flex; align-items:center; gap:6px; padding:5px 0; border-bottom:1px solid #1e293b;">
-          <button onclick="toggleExternalBlockVisibility('${node.id}')" title="${isHidden ? 'Show' : 'Hide'}" style="background:none;border:none;cursor:pointer;font-size:14px;padding:0;line-height:1;opacity:${isHidden ? 0.4 : 1};">${isHidden ? '🙈' : '👁️'}</button>
-          <span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:${typeDef.color};color:#fff;text-transform:uppercase;flex-shrink:0;">${typeDef.emoji}</span>
-          <span style="font-size:11px;color:${isHidden ? '#475569' : '#c4b5fd'};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${isHidden ? 'text-decoration:line-through;' : ''}" title="${escapeHtml(node.name)}">${escapeHtml(node.name)}</span>
+        <div style="display:flex; align-items:center; gap:6px; padding:4px 0; border-bottom:1px solid #1e293b;">
+          <button onclick="toggleExternalBlockVisibility('${node.id}')" title="${isHidden ? 'Show' : 'Hide'}" style="background:none;border:none;cursor:pointer;font-size:13px;padding:0;line-height:1;opacity:${isHidden ? 0.35 : 1};">${isHidden ? '🙈' : '👁️'}</button>
+          <span style="font-size:8.5px;font-weight:700;padding:1px 4px;border-radius:3px;background:${typeDef.color};color:#fff;text-transform:uppercase;flex-shrink:0;">${typeDef.emoji}</span>
+          <span style="font-size:11px;color:${isHidden ? '#475569' : '#c4b5fd'};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;${isHidden ? 'text-decoration:line-through;' : ''}" title="${escapeHtml(node.name)}" onclick="focusBoundaryDiagramElement('${node.id}')">${escapeHtml(node.name)}</span>
         </div>`;
     });
   }
@@ -37964,6 +38479,437 @@ function renderBoundaryVisibilityPanel() {
   panel.innerHTML = html;
 }
 window.renderBoundaryVisibilityPanel = renderBoundaryVisibilityPanel;
+
+function drawBoundaryDiagramWrappedText(c, text, x, y, maxWidth, lineHeight, maxLines = 3) {
+  if (!text) return;
+  const words = String(text).split(' ');
+  let line = '';
+  const lines = [];
+
+  for (let n = 0; n < words.length; n++) {
+    const testLine = line + (line ? ' ' : '') + words[n];
+    const metrics = c.measureText(testLine);
+    if (metrics.width > maxWidth && n > 0) {
+      lines.push(line);
+      line = words[n];
+      if (lines.length >= maxLines - 1) break;
+    } else {
+      line = testLine;
+    }
+  }
+  if (line && lines.length < maxLines) lines.push(line);
+
+  const startY = y - ((lines.length - 1) * lineHeight) / 2;
+  lines.forEach((l, idx) => {
+    c.fillText(l, x, startY + (idx * lineHeight));
+  });
+}
+
+function generateBoundaryDiagramCanvas() {
+  if (!fmeaData || !fmeaData.boundaryDiagram) return null;
+  const nodes = (fmeaData.boundaryDiagram.nodes || []).filter(n => !n.hidden);
+  const extNodes = (fmeaData.boundaryDiagram.externalNodes || []).filter(n => !n.hidden);
+  const connections = fmeaData.boundaryDiagram.connections || [];
+  const allNodes = [...nodes, ...extNodes];
+
+  if (allNodes.length === 0) {
+    if (typeof showToast === 'function') showToast('⚠️ No visible blocks to export in Boundary Diagram.', 'warning');
+    else alert('No visible blocks to export in Boundary Diagram.');
+    return null;
+  }
+
+  // Calculate bounding box of all visible nodes
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  allNodes.forEach(n => {
+    const nx = Number(n.x) || 50;
+    const ny = Number(n.y) || 50;
+    const nw = Number(n.width) || 200;
+    const nh = Number(n.height) || 80;
+    minX = Math.min(minX, nx);
+    minY = Math.min(minY, ny);
+    maxX = Math.max(maxX, nx + nw);
+    maxY = Math.max(maxY, ny + nh);
+  });
+
+  const pad = 80;
+  const topHeaderHeight = 90;
+  const bottomLegendHeight = 70;
+
+  const contentW = Math.max(1000, (maxX - minX) + pad * 2);
+  const contentH = Math.max(700, (maxY - minY) + pad * 2 + topHeaderHeight + bottomLegendHeight);
+
+  const scale = 2; // Retina 2x scale
+  const canvas = document.createElement('canvas');
+  canvas.width = contentW * scale;
+  canvas.height = contentH * scale;
+
+  const c = canvas.getContext('2d');
+  c.scale(scale, scale);
+
+  // Background
+  c.fillStyle = '#0b1329';
+  c.fillRect(0, 0, contentW, contentH);
+
+  // Grid pattern dots
+  c.fillStyle = 'rgba(51, 65, 85, 0.4)';
+  for (let gx = 0; gx < contentW; gx += 20) {
+    for (let gy = topHeaderHeight; gy < contentH - bottomLegendHeight; gy += 20) {
+      c.beginPath();
+      c.arc(gx, gy, 1, 0, Math.PI * 2);
+      c.fill();
+    }
+  }
+
+  // Header Banner
+  c.fillStyle = '#1e293b';
+  c.fillRect(0, 0, contentW, topHeaderHeight);
+  c.strokeStyle = '#334155';
+  c.lineWidth = 1;
+  c.beginPath();
+  c.moveTo(0, topHeaderHeight);
+  c.lineTo(contentW, topHeaderHeight);
+  c.stroke();
+
+  // Header Title
+  const partName = (fmeaData.header && (fmeaData.header.partName || fmeaData.header.fmeaTitle)) || (fmeaData.structure && fmeaData.structure.name) || 'System Analysis';
+  const partNo = (fmeaData.header && fmeaData.header.partNo) || (fmeaData.structure && fmeaData.structure.partNo) || '';
+  const revDate = (fmeaData.header && fmeaData.header.date) || new Date().toISOString().split('T')[0];
+
+  c.textAlign = 'left';
+  c.textBaseline = 'top';
+  c.fillStyle = '#38bdf8';
+  c.font = 'bold 18px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  c.fillText(`📐 DFMEA Boundary Diagram — ${partName}${partNo ? ' (' + partNo + ')' : ''}`, 30, 24);
+
+  c.fillStyle = '#94a3b8';
+  c.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  c.fillText(`AIAG & VDA Compliant System Scope Mapping  |  Export Date: ${revDate}  |  Visible Blocks: ${allNodes.length}`, 30, 52);
+
+  // Coordinate offset for centering content
+  const offsetX = pad - minX;
+  const offsetY = pad + topHeaderHeight - minY;
+
+  // Render Connections
+  const hiddenIds = new Set();
+  (fmeaData.boundaryDiagram.nodes || []).forEach(n => { if (n.hidden) hiddenIds.add(n.id); });
+  (fmeaData.boundaryDiagram.externalNodes || []).forEach(n => { if (n.hidden) hiddenIds.add(n.id); });
+
+  connections.forEach(conn => {
+    if (hiddenIds.has(conn.fromId) || hiddenIds.has(conn.toId)) return;
+    const fromNode = allNodes.find(n => n.id === conn.fromId);
+    const toNode = allNodes.find(n => n.id === conn.toId);
+    if (!fromNode || !toNode) return;
+
+    const pts = getBoundaryNearestEdgePoints(fromNode, toNode);
+    const x1 = pts.x1 + offsetX;
+    const y1 = pts.y1 + offsetY;
+    const x2 = pts.x2 + offsetX;
+    const y2 = pts.y2 + offsetY;
+
+    let strokeColor = '#3b82f6';
+    const mainType = conn.type || (conn.types ? conn.types[0] : 'Electrical');
+    if (mainType === 'Mechanical') strokeColor = '#64748b';
+    else if (mainType === 'Electrical') strokeColor = '#3b82f6';
+    else if (mainType === 'Thermal') strokeColor = '#ef4444';
+    else if (mainType === 'Signal') strokeColor = '#a855f7';
+    else if (mainType === 'Fluid') strokeColor = '#06b6d4';
+    else if (mainType === 'Material') strokeColor = '#10b981';
+    else if (mainType === 'Software') strokeColor = '#f59e0b';
+
+    c.save();
+    c.strokeStyle = strokeColor;
+    c.lineWidth = 3;
+    if (mainType === 'Signal' || mainType === 'Software') {
+      c.setLineDash([6, 6]);
+    }
+    c.beginPath();
+    c.moveTo(x1, y1);
+    c.lineTo(x2, y2);
+    c.stroke();
+    c.restore();
+
+    // Draw Arrowheads
+    const angle = Math.atan2(y2 - y1, x2 - x1);
+    const arrowLen = 12;
+    // End arrow
+    c.save();
+    c.fillStyle = strokeColor;
+    c.beginPath();
+    c.moveTo(x2, y2);
+    c.lineTo(x2 - arrowLen * Math.cos(angle - Math.PI / 6), y2 - arrowLen * Math.sin(angle - Math.PI / 6));
+    c.lineTo(x2 - arrowLen * Math.cos(angle + Math.PI / 6), y2 - arrowLen * Math.sin(angle + Math.PI / 6));
+    c.closePath();
+    c.fill();
+
+    // Start arrow (if bidirectional or reverse)
+    let typeDirs = conn.typeDirections || {};
+    if (conn.interfaceId && fmeaData.interfaceMatrix) {
+      const iface = fmeaData.interfaceMatrix.find(i => i.id === conn.interfaceId);
+      if (iface && iface.typeDirections) typeDirs = Object.assign({}, iface.typeDirections, typeDirs);
+    }
+    const hasReverse = Object.values(typeDirs).includes('BOTH') || Object.values(typeDirs).includes('TO_FROM') || Object.keys(typeDirs).length === 0;
+    if (hasReverse) {
+      c.beginPath();
+      c.moveTo(x1, y1);
+      c.lineTo(x1 + arrowLen * Math.cos(angle - Math.PI / 6), y1 + arrowLen * Math.sin(angle - Math.PI / 6));
+      c.lineTo(x1 + arrowLen * Math.cos(angle + Math.PI / 6), y1 + arrowLen * Math.sin(angle + Math.PI / 6));
+      c.closePath();
+      c.fill();
+    }
+    c.restore();
+
+    // Midpoint Pill Badge
+    const midX = (x1 + x2) / 2;
+    const midY = (y1 + y2) / 2;
+    const typesList = (conn.types && conn.types.length > 0) ? conn.types : [mainType];
+    const initials = typesList.map(t => getInterfaceTypeInitials(t)).join(', ');
+    const pillText = `↔ [${initials}]`;
+
+    c.font = 'bold 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    const textWidth = c.measureText(pillText).width;
+    const pillW = Math.max(70, textWidth + 24);
+    const pillH = 24;
+
+    c.fillStyle = '#0f172a';
+    c.strokeStyle = strokeColor;
+    c.lineWidth = 1.5;
+    if (typeof c.roundRect === 'function') {
+      c.beginPath();
+      c.roundRect(midX - pillW / 2, midY - pillH / 2, pillW, pillH, 8);
+      c.fill();
+      c.stroke();
+    } else {
+      c.fillRect(midX - pillW / 2, midY - pillH / 2, pillW, pillH);
+      c.strokeRect(midX - pillW / 2, midY - pillH / 2, pillW, pillH);
+    }
+
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.fillStyle = '#38bdf8';
+    c.fillText(pillText, midX, midY);
+  });
+
+  // Render Nodes
+  allNodes.forEach(node => {
+    const isExt = !!node.externalType;
+    const nx = (Number(node.x) || 50) + offsetX;
+    const ny = (Number(node.y) || 50) + offsetY;
+    const nw = Number(node.width) || 200;
+    const nh = Number(node.height) || 80;
+
+    c.save();
+    if (isExt) {
+      const typeDef = (typeof EXTERNAL_BLOCK_TYPES !== 'undefined' && EXTERNAL_BLOCK_TYPES[node.externalType]) || { color: '#a855f7', bg: 'rgba(168, 85, 247, 0.15)', emoji: '🌐' };
+      c.fillStyle = '#1e293b';
+      c.strokeStyle = typeDef.color;
+      c.lineWidth = 2;
+      c.setLineDash([5, 5]);
+
+      if (typeof c.roundRect === 'function') {
+        c.beginPath();
+        c.roundRect(nx, ny, nw, nh, 8);
+        c.fill();
+        c.stroke();
+      } else {
+        c.fillRect(nx, ny, nw, nh);
+        c.strokeRect(nx, ny, nw, nh);
+      }
+      c.setLineDash([]);
+
+      // Top Tag
+      c.fillStyle = typeDef.color;
+      c.font = 'bold 9px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      c.textAlign = 'left';
+      c.textBaseline = 'top';
+      c.fillText(`${typeDef.emoji} EXTERNAL · ${node.externalType || 'CUSTOM'}`, nx + 10, ny + 10);
+
+      // Node Name
+      c.fillStyle = typeDef.color;
+      c.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      c.textAlign = 'left';
+      c.textBaseline = 'middle';
+      drawBoundaryDiagramWrappedText(c, node.name || 'External Block', nx + 10, ny + 38, nw - 20, 15, 2);
+    } else {
+      const isRoot = node.type === 'SYSTEM_ROOT';
+      const isSub = node.type === 'SUBSYSTEM';
+      const badgeColor = isRoot ? '#0284c7' : (isSub ? '#059669' : '#64748b');
+      const borderColor = isRoot ? '#0284c7' : '#334155';
+
+      c.fillStyle = isRoot ? '#1e293b' : '#182234';
+      c.strokeStyle = borderColor;
+      c.lineWidth = 2;
+
+      if (typeof c.roundRect === 'function') {
+        c.beginPath();
+        c.roundRect(nx, ny, nw, nh, 8);
+        c.fill();
+        c.stroke();
+      } else {
+        c.fillRect(nx, ny, nw, nh);
+        c.strokeRect(nx, ny, nw, nh);
+      }
+
+      // Top Tag Badge
+      c.fillStyle = badgeColor;
+      if (typeof c.roundRect === 'function') {
+        c.beginPath();
+        c.roundRect(nx + 10, ny + 8, 70, 16, 3);
+        c.fill();
+      } else {
+        c.fillRect(nx + 10, ny + 8, 70, 16);
+      }
+
+      c.fillStyle = '#ffffff';
+      c.font = 'bold 8.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.fillText(node.type || 'BLOCK', nx + 45, ny + 16);
+
+      // Part No (top right)
+      if (node.partNo) {
+        c.fillStyle = '#94a3b8';
+        c.font = 'bold 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        c.textAlign = 'right';
+        c.fillText(node.partNo, nx + nw - 10, ny + 16);
+      }
+
+      // Separator line
+      c.strokeStyle = '#334155';
+      c.lineWidth = 1;
+      c.beginPath();
+      c.moveTo(nx + 10, ny + 28);
+      c.lineTo(nx + nw - 10, ny + 28);
+      c.stroke();
+
+      // Node Name
+      c.fillStyle = '#f8fafc';
+      c.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      c.textAlign = 'left';
+      c.textBaseline = 'middle';
+      drawBoundaryDiagramWrappedText(c, node.name || 'Unnamed Element', nx + 10, ny + 48, nw - 20, 15, 2);
+    }
+    c.restore();
+  });
+
+  // Bottom Legend
+  c.fillStyle = 'rgba(15, 23, 42, 0.95)';
+  c.fillRect(20, contentH - bottomLegendHeight + 10, contentW - 40, bottomLegendHeight - 20);
+  c.strokeStyle = '#334155';
+  c.lineWidth = 1;
+  c.strokeRect(20, contentH - bottomLegendHeight + 10, contentW - 40, bottomLegendHeight - 20);
+
+  c.fillStyle = '#94a3b8';
+  c.font = 'bold 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  c.textAlign = 'left';
+  c.textBaseline = 'middle';
+  c.fillText('🏷️ INTERFACE LEGEND:', 35, contentH - bottomLegendHeight / 2);
+
+  const legendItems = [
+    { code: 'M', name: 'Mechanical', color: '#64748b' },
+    { code: 'E', name: 'Electrical', color: '#3b82f6' },
+    { code: 'T', name: 'Thermal', color: '#ef4444' },
+    { code: 'S', name: 'Signal', color: '#a855f7' },
+    { code: 'F', name: 'Fluid', color: '#06b6d4' },
+    { code: 'Ma', name: 'Material', color: '#10b981' },
+    { code: 'Sw', name: 'Software', color: '#f59e0b' }
+  ];
+
+  let lx = 180;
+  legendItems.forEach(item => {
+    c.fillStyle = item.color;
+    if (typeof c.roundRect === 'function') {
+      c.beginPath();
+      c.roundRect(lx, contentH - bottomLegendHeight / 2 - 8, 16, 16, 3);
+      c.fill();
+    } else {
+      c.fillRect(lx, contentH - bottomLegendHeight / 2 - 8, 16, 16);
+    }
+    c.fillStyle = '#ffffff';
+    c.font = 'bold 9px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    c.textAlign = 'center';
+    c.fillText(item.code, lx + 8, contentH - bottomLegendHeight / 2);
+
+    c.fillStyle = '#cbd5e1';
+    c.font = '10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    c.textAlign = 'left';
+    c.fillText(item.name, lx + 22, contentH - bottomLegendHeight / 2);
+    lx += c.measureText(item.name).width + 42;
+  });
+
+  return canvas;
+}
+
+function exportBoundaryDiagramPNG() {
+  const canvas = generateBoundaryDiagramCanvas();
+  if (!canvas) return;
+
+  const partName = (fmeaData.header && (fmeaData.header.partName || fmeaData.header.fmeaTitle)) || (fmeaData.structure && fmeaData.structure.name) || 'Boundary_Diagram';
+  const cleanPartName = String(partName).replace(/[^a-zA-Z0-9_-]/g, '_');
+  const filename = `Boundary_Diagram_${cleanPartName}_${Date.now()}.png`;
+
+  const link = document.createElement('a');
+  link.download = filename;
+  link.href = canvas.toDataURL('image/png');
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  if (typeof showToast === 'function') {
+    showToast(`📸 Successfully exported Boundary Diagram PNG (${filename})!`, 'success');
+  }
+}
+window.exportBoundaryDiagramPNG = exportBoundaryDiagramPNG;
+
+function exportBoundaryDiagramPDF() {
+  const canvas = generateBoundaryDiagramCanvas();
+  if (!canvas) return;
+
+  const imgData = canvas.toDataURL('image/png');
+  const partName = (fmeaData.header && (fmeaData.header.partName || fmeaData.header.fmeaTitle)) || (fmeaData.structure && fmeaData.structure.name) || 'DFMEA Boundary Diagram';
+
+  const printWindow = window.open('', '_blank', 'width=1200,height=800');
+  if (!printWindow) {
+    alert('Pop-up blocked. Please allow pop-ups to export/print PDF.');
+    return;
+  }
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>${escapeHtml(partName)} - DFMEA Boundary Diagram</title>
+      <style>
+        @page { size: landscape; margin: 8mm; }
+        body { margin: 0; padding: 10px; background: #ffffff; display: flex; flex-direction: column; align-items: center; font-family: sans-serif; }
+        img { max-width: 100%; height: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.15); border-radius: 6px; }
+        .no-print { margin-bottom: 12px; display: flex; gap: 10px; }
+        .btn { background: #0284c7; color: #fff; border: none; padding: 8px 16px; border-radius: 4px; font-weight: bold; cursor: pointer; }
+        @media print { .no-print { display: none !important; } body { padding: 0; } img { box-shadow: none; border-radius: 0; width: 100%; } }
+      </style>
+    </head>
+    <body>
+      <div class="no-print">
+        <button class="btn" onclick="window.print()">🖨️ Print / Save as PDF</button>
+        <button class="btn" style="background:#64748b;" onclick="window.close()">✖ Close</button>
+      </div>
+      <img src="${imgData}" alt="DFMEA Boundary Diagram" />
+      <script>
+        window.onload = function() {
+          setTimeout(function() { window.print(); }, 400);
+        };
+      </script>
+    </body>
+    </html>
+  `);
+  printWindow.document.close();
+
+  if (typeof showToast === 'function') {
+    showToast('📄 Opened Boundary Diagram for PDF Export / Printing!', 'info');
+  }
+}
+window.exportBoundaryDiagramPDF = exportBoundaryDiagramPDF;
+
+
 
 // ============================================================
 // COLLAPSIBLE LEFT VISIBILITY PANEL — Boundary Diagram
@@ -38915,17 +39861,47 @@ function renderPfdConnectionsOnly() {
       (item1.decisionId && item1.decisionId === item2.id);
 
     let insertBtnGroup = null;
+    let deleteBtnGroup = null;
     let reverseBtnGroup = null;
 
     // Only render interactive buttons on standard flow connections (BLOCKED for Decision Yes/No branches)
     if (!isDecisionBranchConn) {
-      // A. [+] Insert In-Between Button at visual midpoint
-      const midBtnX = Math.round((startX + endX) / 2);
-      const midBtnY = Math.round((startY + endY) / 2);
+      const midX = Math.round((startX + endX) / 2);
+      const midY = Math.round((startY + endY) / 2);
+      const isHorizontal = Math.abs(endX - startX) >= Math.abs(endY - startY);
+      const dir = isHorizontal ? ((endX >= startX) ? 1 : -1) : ((endY >= startY) ? 1 : -1);
 
+      // Default positions: [+] and [🗑️] side-by-side at midpoint, [⇄] near arrow head
+      let finalMidBtnX = isHorizontal ? (midX - dir * 14) : midX;
+      let finalMidBtnY = isHorizontal ? midY : (midY - dir * 14);
+
+      let finalDelBtnX = isHorizontal ? (midX + dir * 14) : midX;
+      let finalDelBtnY = isHorizontal ? midY : (midY + dir * 14);
+
+      let finalHeadBtnX = Math.round(headBtnX);
+      let finalHeadBtnY = Math.round(headBtnY);
+
+      // Check if arrowhead button collides with delete button
+      const distToHead = Math.hypot(finalHeadBtnX - finalDelBtnX, finalHeadBtnY - finalDelBtnY);
+      if (distToHead < 30) {
+        // Tight space: arrange all 3 buttons in a clean equidistant trio centered around the midpoint
+        if (isHorizontal) {
+          finalMidBtnX = midX - dir * 28;
+          finalDelBtnX = midX;
+          finalHeadBtnX = midX + dir * 28;
+          finalHeadBtnY = midY;
+        } else {
+          finalMidBtnY = midY - dir * 28;
+          finalDelBtnY = midY;
+          finalHeadBtnY = midY + dir * 28;
+          finalHeadBtnX = midX;
+        }
+      }
+
+      // A. [+] Insert In-Between Button
       insertBtnGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       insertBtnGroup.setAttribute('class', 'pfd-arrow-insert-btn');
-      insertBtnGroup.setAttribute('transform', `translate(${midBtnX}, ${midBtnY})`);
+      insertBtnGroup.setAttribute('transform', `translate(${finalMidBtnX}, ${finalMidBtnY})`);
       insertBtnGroup.setAttribute('title', `Insert element between ${item1.name || item1.type} and ${item2.name || item2.type}`);
       insertBtnGroup.style.opacity = '0';
       insertBtnGroup.style.pointerEvents = 'none';
@@ -38944,10 +39920,33 @@ function renderPfdConnectionsOnly() {
 
       connGroup.appendChild(insertBtnGroup);
 
-      // B. [⇄] Reverse Direction Button right at the Arrow Head
+      // B. [🗑️] Delete Connection Button right next to Insert (+)
+      deleteBtnGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      deleteBtnGroup.setAttribute('class', 'pfd-arrow-delete-btn');
+      deleteBtnGroup.setAttribute('transform', `translate(${finalDelBtnX}, ${finalDelBtnY})`);
+      deleteBtnGroup.setAttribute('title', `Delete connection link (${item1.name || item1.type} ➔ ${item2.name || item2.type})`);
+      deleteBtnGroup.style.opacity = '0';
+      deleteBtnGroup.style.pointerEvents = 'none';
+      deleteBtnGroup.style.cursor = 'pointer';
+
+      deleteBtnGroup.innerHTML = `
+        <circle cx="0" cy="0" r="11" fill="#0f172a" stroke="${isSelected ? '#f43f5e' : '#f87171'}" stroke-width="2" />
+        <path d="M -5 -3 L 5 -3 M -2 -3 L -2 -5.5 L 2 -5.5 L 2 -3 M -4 -1 L -3 5 L 3 5 L 4 -1" stroke="${isSelected ? '#f43f5e' : '#f87171'}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+        <line x1="-1" y1="0.5" x2="-1" y2="3.5" stroke="${isSelected ? '#f43f5e' : '#f87171'}" stroke-width="1.2" stroke-linecap="round" />
+        <line x1="1" y1="0.5" x2="1" y2="3.5" stroke="${isSelected ? '#f43f5e' : '#f87171'}" stroke-width="1.2" stroke-linecap="round" />
+      `;
+
+      deleteBtnGroup.onclick = (e) => {
+        e.stopPropagation();
+        deletePfdConnection(conn.id);
+      };
+
+      connGroup.appendChild(deleteBtnGroup);
+
+      // C. [⇄] Reverse Direction Button
       reverseBtnGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       reverseBtnGroup.setAttribute('class', 'pfd-arrow-reverse-btn');
-      reverseBtnGroup.setAttribute('transform', `translate(${Math.round(headBtnX)}, ${Math.round(headBtnY)})`);
+      reverseBtnGroup.setAttribute('transform', `translate(${finalHeadBtnX}, ${finalHeadBtnY})`);
       reverseBtnGroup.setAttribute('title', `Reverse arrow direction (${item1.name || item1.type} ➔ ${item2.name || item2.type})`);
       reverseBtnGroup.style.opacity = '0';
       reverseBtnGroup.style.pointerEvents = 'none';
@@ -38974,6 +39973,10 @@ function renderPfdConnectionsOnly() {
         insertBtnGroup.style.opacity = '1';
         insertBtnGroup.style.pointerEvents = 'auto';
       }
+      if (deleteBtnGroup) {
+        deleteBtnGroup.style.opacity = '1';
+        deleteBtnGroup.style.pointerEvents = 'auto';
+      }
       if (reverseBtnGroup) {
         reverseBtnGroup.style.opacity = '1';
         reverseBtnGroup.style.pointerEvents = 'auto';
@@ -38984,6 +39987,10 @@ function renderPfdConnectionsOnly() {
       if (insertBtnGroup) {
         insertBtnGroup.style.opacity = '0';
         insertBtnGroup.style.pointerEvents = 'none';
+      }
+      if (deleteBtnGroup) {
+        deleteBtnGroup.style.opacity = '0';
+        deleteBtnGroup.style.pointerEvents = 'none';
       }
       if (reverseBtnGroup) {
         reverseBtnGroup.style.opacity = '0';
@@ -58415,6 +59422,13 @@ function handleNetworkNodeDblClick(e, node) {
     return;
   }
 
+  if (typeof isFMEAReadOnlyOrNoRevInProgress === 'function' && isFMEAReadOnlyOrNoRevInProgress()) {
+    if (typeof showToast === 'function') {
+      showToast('🔒 Quick edit is disabled in read-only mode or when revision is not in progress.', 'warning');
+    }
+    return;
+  }
+
   if (typeof checkCanEditFMEA === 'function' && !checkCanEditFMEA()) return;
 
   const ctx = (typeof getActiveFmeaData === 'function') ? getActiveFmeaData() : fmeaData;
@@ -59426,11 +60440,11 @@ function inspectFailureNetworkNode(nodeId) {
   function getAPBadgeStyle(apVal) {
     var apStr = String(apVal || '').trim();
     if (apStr === 'H' || apStr.startsWith('High') || apStr.includes('(H)')) {
-      return { bg: 'rgba(239,68,68,0.18)', color: '#ef4444', border: '#ef4444', text: apStr.includes('(H)') ? apStr : 'High (H)' };
+      return { bg: 'rgba(239,68,68,0.18)', color: '#ef4444', border: '#ef4444', text: apStr.includes('(H)') ? apStr : 'H' };
     } else if (apStr === 'M' || apStr.startsWith('Medium') || apStr.startsWith('Med') || apStr.includes('(M)')) {
-      return { bg: 'rgba(245,158,11,0.18)', color: '#f59e0b', border: '#f59e0b', text: apStr.includes('(M)') ? apStr : 'Med (M)' };
+      return { bg: 'rgba(245,158,11,0.18)', color: '#f59e0b', border: '#f59e0b', text: apStr.includes('(M)') ? apStr : 'M' };
     } else if (apStr === 'L' || apStr.startsWith('Low') || apStr.includes('(L)')) {
-      return { bg: 'rgba(16,185,129,0.18)', color: '#10b981', border: '#10b981', text: apStr.includes('(L)') ? apStr : 'Low (L)' };
+      return { bg: 'rgba(16,185,129,0.18)', color: '#10b981', border: '#10b981', text: apStr.includes('(L)') ? apStr : 'L' };
     }
     return { bg: 'rgba(100,116,139,0.18)', color: '#94a3b8', border: '#475569', text: apStr || '-' };
   }
@@ -60131,6 +61145,14 @@ function fnInspOpenActions(causeId, nodeId) {
 
 // ── Direct edit openers for control & action items (opens Quick Edit modal directly) ───
 function fnInspOpenCtrlEditDirect(ctrlId, causeId, nodeId, type) {
+  if (typeof isFMEAReadOnlyOrNoRevInProgress === 'function' && isFMEAReadOnlyOrNoRevInProgress()) {
+    if (typeof showToast === 'function') {
+      showToast('🔒 Editing is disabled in read-only mode or when revision is not in progress.', 'warning');
+    }
+    return;
+  }
+  if (typeof checkCanEditFMEA === 'function' && !checkCanEditFMEA()) return;
+
   if (typeof openQuickFieldEditModal === 'function') {
     var editType = (type === 'Detection' || type === 'DETECTION_CONTROL') ? 'DETECTION_CONTROL' : 'PREVENTION_CONTROL';
     openQuickFieldEditModal(editType, { causeId: causeId, ctrlId: ctrlId });
@@ -60145,6 +61167,14 @@ function fnInspOpenCtrlEditDirect(ctrlId, causeId, nodeId, type) {
 window.fnInspOpenCtrlEditDirect = fnInspOpenCtrlEditDirect;
 
 function fnInspOpenActEditDirect(actId, causeId, nodeId) {
+  if (typeof isFMEAReadOnlyOrNoRevInProgress === 'function' && isFMEAReadOnlyOrNoRevInProgress()) {
+    if (typeof showToast === 'function') {
+      showToast('🔒 Editing is disabled in read-only mode or when revision is not in progress.', 'warning');
+    }
+    return;
+  }
+  if (typeof checkCanEditFMEA === 'function' && !checkCanEditFMEA()) return;
+
   if (typeof openQuickFieldEditModal === 'function') {
     openQuickFieldEditModal('ACTION', { causeId: causeId, actId: actId });
   } else if (typeof openActionModal === 'function') {
@@ -60160,7 +61190,14 @@ window.fnInspOpenActEditDirect = fnInspOpenActEditDirect;
 // ── Inspector helper: Ctrl+DblClick → open modal in EDIT mode ────
 function fnInspOpenCtrlEdit(event, ctrlId, causeId, nodeId) {
   if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
-  if (event && event.ctrlKey) {
+  if (event && (event.ctrlKey || event.metaKey)) {
+    if (typeof isFMEAReadOnlyOrNoRevInProgress === 'function' && isFMEAReadOnlyOrNoRevInProgress()) {
+      if (typeof showToast === 'function') {
+        showToast('🔒 Quick edit is disabled in read-only mode or when revision is not in progress.', 'warning');
+      }
+      return;
+    }
+    if (typeof checkCanEditFMEA === 'function' && !checkCanEditFMEA()) return;
     fnInspOpenCtrlEditDirect(ctrlId, causeId, nodeId);
     return;
   }
@@ -60171,7 +61208,14 @@ function fnInspOpenCtrlEdit(event, ctrlId, causeId, nodeId) {
 // ── Inspector helper: Ctrl+DblClick → open action in EDIT mode ───
 function fnInspOpenActEdit(event, actId, causeId, nodeId) {
   if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
-  if (event && event.ctrlKey) {
+  if (event && (event.ctrlKey || event.metaKey)) {
+    if (typeof isFMEAReadOnlyOrNoRevInProgress === 'function' && isFMEAReadOnlyOrNoRevInProgress()) {
+      if (typeof showToast === 'function') {
+        showToast('🔒 Quick edit is disabled in read-only mode or when revision is not in progress.', 'warning');
+      }
+      return;
+    }
+    if (typeof checkCanEditFMEA === 'function' && !checkCanEditFMEA()) return;
     fnInspOpenActEditDirect(actId, causeId, nodeId);
     return;
   }
@@ -68748,6 +69792,13 @@ function handleFmCellDblClick(event, td, flId, fmId) {
     if (typeof event.stopPropagation === 'function') event.stopPropagation();
     if (typeof event.preventDefault === 'function') event.preventDefault();
   }
+  if (typeof isFMEAReadOnlyOrNoRevInProgress === 'function' && isFMEAReadOnlyOrNoRevInProgress()) {
+    if (typeof showToast === 'function') {
+      showToast('🔒 Failure Mode edit is disabled in read-only mode or when revision is not in progress.', 'warning');
+    }
+    return;
+  }
+  if (typeof checkCanEditFMEA === 'function' && !checkCanEditFMEA()) return;
   if (!event || (!event.ctrlKey && !event.metaKey)) {
     if (typeof showToast === 'function') {
       showToast('Failure Mode edit requires Ctrl + Double-Click', 'info');
@@ -68989,7 +70040,8 @@ function onAdminCharLinkageSourceChange(val) {
 window.onAdminCharLinkageSourceChange = onAdminCharLinkageSourceChange;
 
 function onCharLinkageSourceChange(val) {
-  window.activeCharLinkageSource = val || 'characteristics';
+  const isSourceSwitchAllowed = (typeof isCharLinkageSourceSwitchEnabled === 'function') ? isCharLinkageSourceSwitchEnabled() : false;
+  window.activeCharLinkageSource = isSourceSwitchAllowed ? (val || 'characteristics') : 'characteristics';
   renderCharacteristicsLinkageElementNav();
   renderCharacteristicsLinkageOpNav();
   renderCharacteristicsLinkageMatrix();
@@ -69035,7 +70087,10 @@ function openCharacteristicsLinkageModal(targetElementId = null) {
     pfmeaBadge.textContent = `🏭 PFMEA: ${activePfmea.name || 'Process'}`;
   }
 
-  const defaultSource = (fmeaData.settings && fmeaData.settings.charLinkageSource) || (fmeaData.adminSettings && fmeaData.adminSettings.charLinkageSource) || 'characteristics';
+  const isSourceSwitchAllowed = (typeof isCharLinkageSourceSwitchEnabled === 'function') ? isCharLinkageSourceSwitchEnabled() : false;
+  const defaultSource = isSourceSwitchAllowed
+    ? ((fmeaData.settings && fmeaData.settings.charLinkageSource) || (fmeaData.adminSettings && fmeaData.adminSettings.charLinkageSource) || 'characteristics')
+    : 'characteristics';
   window.activeCharLinkageSource = defaultSource;
   const sourceSel = document.getElementById('charLinkageSourceSelect');
   if (sourceSel) sourceSel.value = defaultSource;
@@ -69236,6 +70291,8 @@ function getLinkageSourceItemsForElement(elementId, opId = 'ALL', sourceMode = '
       const isProduct = app === 'DFMEA' || c.type === 'Product' || (!c.applicability && c.type !== 'Process' && c.origin !== 'PFMEA');
 
       // Only include Product Characteristics or Transient Product Characteristics
+      const allowTransientInMatrix = (typeof isTransientInCharMatrixEnabled === 'function') ? isTransientInCharMatrixEnabled() : false;
+      if (isTransient && !allowTransientInMatrix) return;
       if (!isProduct && !isTransient) return;
 
       // Transient Characteristics: match operation if specific op selected, or element/element ops if ALL
@@ -69342,6 +70399,8 @@ function getLinkageSourceItemsForElement(elementId, opId = 'ALL', sourceMode = '
       targetPf.requirements.forEach(r => {
         const isTransient = r.nature === 'PFMEA_TRANSIENT' || r.applicability === 'PFMEA_TRANSIENT' || r.isTransient;
         if (!isTransient) return;
+        const allowTransientInMatrixReq = (typeof isTransientInCharMatrixEnabled === 'function') ? isTransientInCharMatrixEnabled() : false;
+        if (!allowTransientInMatrixReq) return;
         if (opId !== 'ALL') {
           const matchesOp = String(r.structId) === String(opId) || String(r.pstepId) === String(opId);
           if (!matchesOp) return;
@@ -69754,7 +70813,11 @@ function renderCharacteristicsLinkageMatrix() {
     return;
   }
 
-  const sourceMode = window.activeCharLinkageSource || 'characteristics';
+  const isSourceSwitchAllowed = (typeof isCharLinkageSourceSwitchEnabled === 'function') ? isCharLinkageSourceSwitchEnabled() : false;
+  const sourceMode = isSourceSwitchAllowed ? (window.activeCharLinkageSource || 'characteristics') : 'characteristics';
+  if (!isSourceSwitchAllowed) {
+    window.activeCharLinkageSource = 'characteristics';
+  }
   const items = getLinkageSourceItemsForElement(elementId, activeOpId, sourceMode);
   const activeOpObj = ops.find(p => String(p.id) === String(activeOpId));
 
@@ -69765,7 +70828,8 @@ function renderCharacteristicsLinkageMatrix() {
     bannerOpBadge.style.color = '#38bdf8';
     bannerOpBadge.style.borderColor = '#0284c7';
   }
-  if (bannerStats) bannerStats.textContent = `(${items.length} Product/Transient Specs | ${ops.length} Process Steps)`;
+  const allowTransientDisplay = (typeof isTransientInCharMatrixEnabled === 'function') ? isTransientInCharMatrixEnabled() : false;
+  if (bannerStats) bannerStats.textContent = `(${items.length} ${allowTransientDisplay ? 'Product/Transient Specs' : 'Product Specs'} | ${ops.length} Process Steps)`;
 
   const filters = charLinkageColumnFilters || {};
 
@@ -69798,7 +70862,7 @@ function renderCharacteristicsLinkageMatrix() {
       const itemStatuses = [];
       if (!isLinked) itemStatuses.push('⚠️ Gaps');
       else itemStatuses.push('✅ Linked');
-      if (ch.nature === 'PFMEA_TRANSIENT' || links.some(l => l.nature === 'PFMEA_TRANSIENT')) {
+      if (allowTransientDisplay && (ch.nature === 'PFMEA_TRANSIENT' || links.some(l => l.nature === 'PFMEA_TRANSIENT'))) {
         itemStatuses.push('⚡ Transient');
       }
       if (!itemStatuses.some(st => filters.status.has(st))) return false;
@@ -69837,15 +70901,27 @@ function renderCharacteristicsLinkageMatrix() {
         <tr>
           <th colspan="8" class="th-group-dfmea" style="padding:8px 12px;">
             <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
-              <span style="font-weight:800; letter-spacing:0.02em;">🎨 Product &amp; Transient Characteristics</span>
+              <span style="font-weight:800; letter-spacing:0.02em;">🎨 ${allowTransientDisplay ? 'Product &amp; Transient Characteristics' : 'Product Characteristics'}</span>
               <div style="display:flex; align-items:center; gap:6px; font-weight:normal;">
                 <span style="font-size:11px; color:#cbd5e1; font-weight:600;">Data Source:</span>
-                <select id="charLinkageSourceSelect" onchange="onCharLinkageSourceChange(this.value)"
-                  style="background:#0f172a; border:1px solid #0284c7; color:#38bdf8; font-size:11px; font-weight:700; padding:2px 8px; border-radius:4px; height:24px; outline:none; cursor:pointer;">
+                <select id="charLinkageSourceSelect" ${isSourceSwitchAllowed ? 'onchange="onCharLinkageSourceChange(this.value)"' : 'disabled'}
+                  title="${isSourceSwitchAllowed ? 'Choose Data Source' : 'Data Source selection is locked by Admin Policy (Default: Characteristics)'}"
+                  style="background:${isSourceSwitchAllowed ? '#0f172a' : 'rgba(30,41,59,0.7)'}; border:1px solid ${isSourceSwitchAllowed ? '#0284c7' : '#475569'}; color:${isSourceSwitchAllowed ? '#38bdf8' : '#94a3b8'}; font-size:11px; font-weight:700; padding:2px 8px; border-radius:4px; height:24px; outline:none; cursor:${isSourceSwitchAllowed ? 'pointer' : 'not-allowed'}; ${isSourceSwitchAllowed ? '' : 'opacity:0.75;'}">
                   <option value="characteristics" ${sourceMode === 'characteristics' ? 'selected' : ''}>📐 Characteristics</option>
                   <option value="requirements" ${sourceMode === 'requirements' ? 'selected' : ''}>📋 Requirements</option>
                   <option value="both" ${sourceMode === 'both' ? 'selected' : ''}>🔀 Both (Chars &amp; Reqs)</option>
                 </select>
+                ${!isSourceSwitchAllowed ? '<span title="Locked by Admin Policy: Defaulting to Characteristics" style="font-size:11px; color:#94a3b8; cursor:help;">🔒</span>' : ''}
+                ${(function () {
+      const isAdminUser = (typeof isCurrentUserAdmin === 'function') ? isCurrentUserAdmin() : (typeof currentUser !== 'undefined' && currentUser && (currentUser.role === 'Admin' || currentUser.role === 'SuperAdmin'));
+      if (!isAdminUser) return '';
+      return `
+                    <label title="Admin Policy Toggle: Show or Hide In-Process Transient Characteristics in this window" style="display:inline-flex; align-items:center; gap:5px; margin-left:8px; font-size:11px; color:#cbd5e1; cursor:pointer; background:rgba(15,23,42,0.7); padding:2px 8px; border-radius:4px; border:1px solid ${allowTransientDisplay ? '#d97706' : '#334155'}; transition:all 0.15s ease;">
+                      <input type="checkbox" id="chkAdminToggleTransientInMatrix" ${allowTransientDisplay ? 'checked' : ''} onchange="toggleTransientInCharMatrixAdmin(this.checked)" style="accent-color:#0284c7; width:13px; height:13px; cursor:pointer;">
+                      <span style="color:${allowTransientDisplay ? '#f59e0b' : '#94a3b8'}; font-weight:700;">⚡ Transient (Admin)</span>
+                    </label>
+                  `;
+    })()}
               </div>
             </div>
           </th>
@@ -69882,7 +70958,7 @@ function renderCharacteristicsLinkageMatrix() {
           </th>
           <th class="th-col-dfmea" style="min-width:180px; padding:6px 8px; vertical-align:middle;">
             <div style="display:flex; align-items:center; justify-content:space-between; gap:4px;">
-              <span style="font-weight:700;">Product / Transient Characteristic</span>
+              <span style="font-weight:700;">${allowTransientDisplay ? 'Product / Transient Characteristic' : 'Product Characteristic'}</span>
               <button type="button" class="col-filter-btn" id="charLinkFilterBtn_desc" onclick="openCharLinkageHeaderFilterMenu(event, 'desc')" title="Filter Column">🔻</button>
             </div>
           </th>

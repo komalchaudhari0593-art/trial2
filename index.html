@@ -336,17 +336,20 @@
       stroke-width: 4 !important;
     }
 
-    /* Arrow Insert-In-Between & Reverse Direction Buttons: ONLY visible on hover over connection */
+    /* Arrow Insert-In-Between, Delete & Reverse Direction Buttons: ONLY visible on hover over connection */
     .pfd-arrow-insert-btn,
+    .pfd-arrow-delete-btn,
     .pfd-arrow-reverse-btn {
       cursor: pointer;
       opacity: 0;
       pointer-events: none;
-      transition: opacity 0.18s ease, transform 0.15s ease, filter 0.15s ease;
+      transition: opacity 0.18s ease, filter 0.15s ease;
     }
 
     .pfd-conn-group:hover .pfd-arrow-insert-btn,
     .pfd-conn-group.hovered .pfd-arrow-insert-btn,
+    .pfd-conn-group:hover .pfd-arrow-delete-btn,
+    .pfd-conn-group.hovered .pfd-arrow-delete-btn,
     .pfd-conn-group:hover .pfd-arrow-reverse-btn,
     .pfd-conn-group.hovered .pfd-arrow-reverse-btn {
       opacity: 1 !important;
@@ -354,6 +357,7 @@
     }
 
     .pfd-arrow-insert-btn circle,
+    .pfd-arrow-delete-btn circle,
     .pfd-arrow-reverse-btn circle {
       transition: all 0.15s ease;
     }
@@ -364,21 +368,36 @@
       stroke: #ffffff !important;
     }
 
+    .pfd-arrow-delete-btn:hover circle {
+      fill: #e11d48 !important;
+      stroke: #ffffff !important;
+    }
+
     .pfd-arrow-insert-btn:hover line,
     .pfd-arrow-reverse-btn:hover path {
+      stroke: #ffffff !important;
+    }
+
+    .pfd-arrow-delete-btn:hover path,
+    .pfd-arrow-delete-btn:hover line {
       stroke: #ffffff !important;
     }
 
     .pfd-arrow-insert-btn:hover,
     .pfd-arrow-reverse-btn:hover {
       filter: drop-shadow(0 0 8px #38bdf8);
-      transform: scale(1.12);
     }
 
-    /* When dragging elements, resizing, or panning, NEVER show insert or reverse buttons */
+    .pfd-arrow-delete-btn:hover {
+      filter: drop-shadow(0 0 8px #f43f5e);
+    }
+
+    /* When dragging elements, resizing, or panning, NEVER show connection buttons */
     body.pfd-dragging .pfd-arrow-insert-btn,
+    body.pfd-dragging .pfd-arrow-delete-btn,
     body.pfd-dragging .pfd-arrow-reverse-btn,
     .pfd-dragging .pfd-arrow-insert-btn,
+    .pfd-dragging .pfd-arrow-delete-btn,
     .pfd-dragging .pfd-arrow-reverse-btn {
       display: none !important;
       opacity: 0 !important;
@@ -518,10 +537,12 @@
           </div>
         </div>
 
-        <div class="nav-menu-item" id="navItemRevision" onmouseenter="showMenu('menuRevision')" onmouseleave="hideMenu('menuRevision')">
+        <div class="nav-menu-item" id="navItemRevision" onmouseenter="showMenu('menuRevision')"
+          onmouseleave="hideMenu('menuRevision')">
           <button class="nav-menu-btn" id="navBtnRevision">Revisions <span class="nav-chevron">▾</span></button>
           <div class="nav-dropdown" id="menuRevision">
-            <a class="nav-dd-item" id="menuItemRevisionManagement" onclick="openRevisionModal()"><span class="nav-dd-icon">📋</span> Revisions &amp;
+            <a class="nav-dd-item" id="menuItemRevisionManagement" onclick="openRevisionModal()"><span
+                class="nav-dd-icon">📋</span> Revisions &amp;
               Meetings</a>
           </div>
         </div>
@@ -633,21 +654,29 @@
         </button>
 
         <!-- Revision Approval Notification Bell -->
-        <div class="nav-menu-item nav-bell-container" id="navNotificationBellContainer" onmouseenter="showMenu('menuNotifications')" onmouseleave="hideMenu('menuNotifications')">
-          <button class="nav-bell-btn" id="navNotificationBellBtn" onclick="toggleNotificationDropdown()" title="Pending Revision Approvals & Action Items">
+        <div class="nav-menu-item nav-bell-container" id="navNotificationBellContainer"
+          onmouseenter="showMenu('menuNotifications')" onmouseleave="hideMenu('menuNotifications')">
+          <button class="nav-bell-btn" id="navNotificationBellBtn" onclick="toggleNotificationDropdown()"
+            title="Pending Revision Approvals & Action Items">
             <span class="nav-bell-icon" style="font-size:14px;">🔔</span>
             <span id="navNotificationBadge" class="nav-notification-badge" style="display:none;">0</span>
           </button>
-          <div class="nav-dropdown nav-dropdown--right nav-notification-dropdown" id="menuNotifications" style="width:360px; max-height:480px; overflow:hidden; display:none; flex-direction:column; padding:0; z-index:1100;">
-            <div class="nav-notif-header" style="padding:10px 14px; background:var(--bg-modal-header, #0f172a); color:#fff; font-size:13px; font-weight:700; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.1);">
+          <div class="nav-dropdown nav-dropdown--right nav-notification-dropdown" id="menuNotifications"
+            style="width:360px; max-height:480px; overflow:hidden; display:none; flex-direction:column; padding:0; z-index:1100;">
+            <div class="nav-notif-header"
+              style="padding:10px 14px; background:var(--bg-modal-header, #0f172a); color:#fff; font-size:13px; font-weight:700; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.1);">
               <span>🔔 Pending Approval Tasks</span>
-              <span id="navNotifCountLabel" class="badge" style="background:#0284c7; color:#fff; font-size:10px; padding:2px 7px; border-radius:10px;">0 pending</span>
+              <span id="navNotifCountLabel" class="badge"
+                style="background:#0284c7; color:#fff; font-size:10px; padding:2px 7px; border-radius:10px;">0
+                pending</span>
             </div>
             <div id="navNotifListContainer" style="overflow-y:auto; max-height:380px; padding:6px;">
               <!-- Dynamic pending items -->
             </div>
-            <div class="nav-notif-footer" style="padding:8px 12px; background:var(--bg-modal-footer, #f1f5f9); border-top:1px solid #cbd5e1; text-align:center; font-size:11px;">
-              <a href="javascript:void(0)" onclick="openAllSharedApprovalLogsModal()" style="color:#0284c7; font-weight:600; text-decoration:none;">📜 View All Audit &amp; Approval Logs</a>
+            <div class="nav-notif-footer"
+              style="padding:8px 12px; background:var(--bg-modal-footer, #f1f5f9); border-top:1px solid #cbd5e1; text-align:center; font-size:11px;">
+              <a href="javascript:void(0)" onclick="openAllSharedApprovalLogsModal()"
+                style="color:#0284c7; font-weight:600; text-decoration:none;">📜 View All Audit &amp; Approval Logs</a>
             </div>
           </div>
         </div>
@@ -1778,16 +1807,19 @@
         <div id="noProjectPlaceholder"
           style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 480px; height: 65vh; text-align: center; color: var(--text-secondary); background: var(--table-bg); border: 2px dashed var(--border-color); margin: 20px 0; border-radius: 12px; width: 100%;">
           <div id="noProjectPlaceholderIcon" style="font-size: 48px; margin-bottom: 12px;">📑</div>
-          <h2 id="noProjectPlaceholderTitle" style="font-size: 22px; color: var(--text-primary); margin-bottom: 8px; font-weight: 600;">No Active FMEA
+          <h2 id="noProjectPlaceholderTitle"
+            style="font-size: 22px; color: var(--text-primary); margin-bottom: 8px; font-weight: 600;">No Active FMEA
             Project Loaded</h2>
           <p id="noProjectPlaceholderText"
             style="font-size: 14px; max-width: 500px; margin-bottom: 20px; color: var(--text-secondary); line-height: 1.5;">
             Please open your SharePoint repository to select an existing FMEA project JSON file or create a new project
             in the repository.</p>
           <div style="display: flex; gap: 12px;">
-            <button id="noProjectBtnOpenRepo" class="btn btn-primary" onclick="openSharePointFileBrowserModal()">📁 Open SharePoint
+            <button id="noProjectBtnOpenRepo" class="btn btn-primary" onclick="openSharePointFileBrowserModal()">📁 Open
+              SharePoint
               Repository</button>
-            <button id="noProjectBtnCreateRev" class="btn btn-primary" onclick="openRevisionModal()" style="display:none;">📝 Create
+            <button id="noProjectBtnCreateRev" class="btn btn-primary" onclick="openRevisionModal()"
+              style="display:none;">📝 Create
               Initial Revision</button>
           </div>
         </div>
@@ -5187,10 +5219,12 @@
             <h3 id="reqLeftPanelTitle"
               style="margin: 0 0 8px 0; font-size: 12.5px; font-weight: 700; color: #38bdf8; padding-bottom: 4px; border-bottom: 1px solid #334155;">
               Available / Create Requirement</h3>
-            <div id="reqLeftDisabledNotice" style="display:none; padding:16px 12px; background:rgba(15,23,42,0.7); border:1px solid #334155; border-radius:6px; text-align:center; color:#94a3b8; font-size:12px; margin-bottom:8px;">
+            <div id="reqLeftDisabledNotice"
+              style="display:none; padding:16px 12px; background:rgba(15,23,42,0.7); border:1px solid #334155; border-radius:6px; text-align:center; color:#94a3b8; font-size:12px; margin-bottom:8px;">
               <div style="font-size:24px; margin-bottom:6px;">🔒</div>
               <strong style="color:#38bdf8; display:block; margin-bottom:4px;">DFMEA Item Mode</strong>
-              <span>Adding or modifying DFMEA requirements or characteristics from PFMEA is disabled. Please select from the existing items on the right to link.</span>
+              <span>Adding or modifying DFMEA requirements or characteristics from PFMEA is disabled. Please select from
+                the existing items on the right to link.</span>
             </div>
 
             <form id="reqForm" onsubmit="saveRequirement(event)"
@@ -5874,6 +5908,13 @@
               <input type="text" id="linkCharSearchInput" placeholder="🔍 Search name, spec, or class..."
                 style="flex: 1; padding: 3px 8px; font-size: 11px; height: 26px; background: #0f172a; color: #fff; border: 1px solid #475569; border-radius: 4px;"
                 oninput="renderMasterCharacteristicsList()">
+              <select id="linkCharTypeFilter"
+                style="padding: 3px 8px; font-size: 11px; height: 26px; background: #0f172a; color: #38bdf8; border: 1px solid #475569; border-radius: 4px; font-weight: bold;"
+                onchange="renderMasterCharacteristicsList()">
+                <option value="ALL">All (Process &amp; Product)</option>
+                <option value="PROCESS">⚙️ Process Characteristics</option>
+                <option value="PRODUCT">📐 Product Characteristics (DFMEA)</option>
+              </select>
               <select id="linkCharVariantFilter"
                 style="padding: 3px 8px; font-size: 11px; height: 26px; background: #0f172a; color: #fff; border: 1px solid #475569; border-radius: 4px;"
                 onchange="renderMasterCharacteristicsList()">
@@ -6862,18 +6903,28 @@
               </div>
               <div
                 style="grid-column: span 2; border-top: 1px solid var(--border-color); padding-top: 12px; margin-top: 4px;">
-                <label style="font-size: 12px; font-weight: 700; color: #38bdf8; display: block; margin-bottom: 4px;">
-                  🔗 Characteristics Linkage Matrix Data Source Policy *
+                <label
+                  style="font-size: 12px; font-weight: 700; color: #38bdf8; display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer;">
+                  <input type="checkbox" id="settingEnableCharLinkageSourceSwitch"
+                    onchange="toggleCharLinkageSourceSwitchAdmin(this.checked)"
+                    style="accent-color: #0284c7; width: 14px; height: 14px; cursor: pointer;">
+                  <span>🔗 Enable Characteristics Linkage Matrix Data Source Selection</span>
                 </label>
-                <select id="settingCharLinkageSource"
-                  style="width: 100%; max-width: 480px; padding: 7px 10px; border-radius: 6px; font-size: 12px; background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border-color);">
-                  <option value="characteristics" selected>📐 Characteristics Master Library (Default)</option>
-                  <option value="requirements">📋 Requirements Catalog</option>
-                  <option value="both">🔀 Both (Characteristics &amp; Requirements)</option>
-                </select>
-                <span class="admin-help-text" style="margin-top:4px; display:block; font-size:11px; color:#94a3b8;">
-                  Sets default scope for the PFMEA-DFMEA Characteristics Linkage Matrix tool across the organization.
-                </span>
+                <div style="margin-top: 6px;">
+                  <label style="font-size: 11px; font-weight: 600; color: #94a3b8; display: block; margin-bottom: 4px;">
+                    Characteristics Linkage Matrix Data Source Policy *
+                  </label>
+                  <select id="settingCharLinkageSource"
+                    style="width: 100%; max-width: 480px; padding: 7px 10px; border-radius: 6px; font-size: 12px; background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border-color);">
+                    <option value="characteristics" selected>📐 Characteristics Master Library (Default)</option>
+                    <option value="requirements">📋 Requirements Catalog</option>
+                    <option value="both">🔀 Both (Characteristics &amp; Requirements)</option>
+                  </select>
+                  <span class="admin-help-text" style="margin-top:4px; display:block; font-size:11px; color:#94a3b8;">
+                    When enabled, users can switch between Characteristics and Requirements directly in the Linkage
+                    Matrix. When disabled, the matrix defaults to Characteristics.
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -8116,7 +8167,7 @@
                 <!-- Dynamically populated with storage locations -->
               </select>
               <span id="spModalLocationPathBadge"
-                style="font-size: 11px; color: #0284c7; font-family: monospace; background: rgba(2,132,199,0.08); padding: 3px 8px; border-radius: 4px; border: 1px solid rgba(2,132,199,0.25);"></span>
+                style="display:none; font-size: 11px; color: #0284c7; font-family: monospace; background: rgba(2,132,199,0.08); padding: 3px 8px; border-radius: 4px; border: 1px solid rgba(2,132,199,0.25);"></span>
             </div>
             <div style="display: flex; align-items: center; gap: 8px;">
               <span class="badge"
@@ -9335,18 +9386,28 @@
       </div>
 
       <!-- Revision Approval Top Notification Banner (Visible in Approval Mode) -->
-      <div id="modalChecklistApprovalNoticeBanner" style="display:none; padding:10px 20px; background:#f0f9ff; border-bottom:1px solid #bae6fd; font-size:12px; color:#0c4a6e;">
+      <div id="modalChecklistApprovalNoticeBanner"
+        style="display:none; padding:10px 20px; background:#f0f9ff; border-bottom:1px solid #bae6fd; font-size:12px; color:#0c4a6e;">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
           <div>
-            <span style="font-weight:700; font-size:13px;" id="modalChecklistApprovalRequesterText">👤 Submitted by User</span>
+            <span style="font-weight:700; font-size:13px;" id="modalChecklistApprovalRequesterText">👤 Submitted by
+              User</span>
             <span style="margin:0 8px; color:#94a3b8;">•</span>
             <span id="modalChecklistApprovalTimeText" style="color:#64748b;">Timestamp</span>
-            <div id="modalChecklistApprovalNotesDisplay" style="margin-top:4px; font-style:italic; color:#334155;"></div>
+            <div id="modalChecklistApprovalNotesDisplay" style="margin-top:4px; font-style:italic; color:#334155;">
+            </div>
           </div>
           <div style="display:flex; align-items:center; gap:8px;">
-            <button id="btnChecklistSendReminder" class="btn btn-sm" style="display:none; padding:4px 12px; font-size:11px; background:#f59e0b; color:#ffffff; font-weight:700; border:none; border-radius:4px; cursor:pointer;" onclick="sendApprovalReminderFromCurrentChecklist()" title="Send reminder email to designated approver">🔔 Send Reminder</button>
-            <button id="btnChecklistChangeApprover" class="btn btn-sm btn-outline" style="display:none; padding:4px 12px; font-size:11px; border-color:#0284c7; color:#0284c7; background:#ffffff; font-weight:700; border-radius:4px; cursor:pointer;" onclick="openReviseApproverFromCurrentChecklist()" title="Reassign designated approver for this revision">🔄 Change Approver</button>
-            <div id="modalChecklistAuthStatusBadge" style="padding:4px 12px; border-radius:20px; font-weight:700; font-size:12px;">
+            <button id="btnChecklistSendReminder" class="btn btn-sm"
+              style="display:none; padding:4px 12px; font-size:11px; background:#f59e0b; color:#ffffff; font-weight:700; border:none; border-radius:4px; cursor:pointer;"
+              onclick="sendApprovalReminderFromCurrentChecklist()" title="Send reminder email to designated approver">🔔
+              Send Reminder</button>
+            <button id="btnChecklistChangeApprover" class="btn btn-sm btn-outline"
+              style="display:none; padding:4px 12px; font-size:11px; border-color:#0284c7; color:#0284c7; background:#ffffff; font-weight:700; border-radius:4px; cursor:pointer;"
+              onclick="openReviseApproverFromCurrentChecklist()"
+              title="Reassign designated approver for this revision">🔄 Change Approver</button>
+            <div id="modalChecklistAuthStatusBadge"
+              style="padding:4px 12px; border-radius:20px; font-weight:700; font-size:12px;">
               Checking permissions...
             </div>
           </div>
@@ -9428,19 +9489,27 @@
       </div>
 
       <!-- Approval Sign-off Action Panel (Visible in Approval Mode) -->
-      <div id="modalChecklistApprovalActionPanel" style="display:none; padding:12px 20px; background:#f8fafc; border-top:2px solid #0284c7; flex-shrink:0;">
+      <div id="modalChecklistApprovalActionPanel"
+        style="display:none; padding:12px 20px; background:#f8fafc; border-top:2px solid #0284c7; flex-shrink:0;">
         <div style="display:flex; gap:16px; align-items:flex-start; justify-content:space-between; flex-wrap:wrap;">
           <div style="flex:1; min-width:280px;">
             <label style="display:block; font-size:12px; font-weight:700; color:#1e293b; margin-bottom:4px;">
-              📝 Approver Comments &amp; Review Remarks <span style="font-size:11px; color:#64748b; font-weight:normal;">(Mandatory if rejecting for rework)</span>:
+              📝 Approver Comments &amp; Review Remarks <span
+                style="font-size:11px; color:#64748b; font-weight:normal;">(Mandatory if rejecting for rework)</span>:
             </label>
-            <textarea id="modalChecklistReviewerComments" rows="2" class="form-control" style="width:100%; padding:6px 10px; font-size:12px; border-radius:5px; border:1px solid #cbd5e1; resize:vertical;" placeholder="Enter your sign-off comments or rejection reasons..."></textarea>
+            <textarea id="modalChecklistReviewerComments" rows="2" class="form-control"
+              style="width:100%; padding:6px 10px; font-size:12px; border-radius:5px; border:1px solid #cbd5e1; resize:vertical;"
+              placeholder="Enter your sign-off comments or rejection reasons..."></textarea>
           </div>
           <div style="display:flex; align-items:center; gap:10px; margin-top:20px;">
-            <button id="btnChecklistRejectRevision" class="btn btn-danger" style="font-weight:700; padding:8px 16px; font-size:13px; display:inline-flex; align-items:center; gap:6px;" onclick="handleApproverDecision('REJECT')">
+            <button id="btnChecklistRejectRevision" class="btn btn-danger"
+              style="font-weight:700; padding:8px 16px; font-size:13px; display:inline-flex; align-items:center; gap:6px;"
+              onclick="handleApproverDecision('REJECT')">
               <span>❌ Reject (Request Rework)</span>
             </button>
-            <button id="btnChecklistApproveRevision" class="btn btn-success" style="font-weight:700; padding:8px 20px; font-size:13px; display:inline-flex; align-items:center; gap:6px; box-shadow:0 2px 6px rgba(16,185,129,0.3);" onclick="handleApproverDecision('APPROVE')">
+            <button id="btnChecklistApproveRevision" class="btn btn-success"
+              style="font-weight:700; padding:8px 20px; font-size:13px; display:inline-flex; align-items:center; gap:6px; box-shadow:0 2px 6px rgba(16,185,129,0.3);"
+              onclick="handleApproverDecision('APPROVE')">
               <span>✅ Accept &amp; Freeze Revision</span>
             </button>
           </div>
@@ -9464,20 +9533,26 @@
   <!-- 24. Select Revision Approver Modal (From User Directory) -->
   <div id="modalSelectRevisionApprover" class="modal">
     <div class="modal-content" style="max-width: 620px; border-radius: 8px; overflow: hidden; padding: 0;">
-      <div class="modal-header" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #fff; padding: 14px 20px; display:flex; justify-content:space-between; align-items:center;">
+      <div class="modal-header"
+        style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #fff; padding: 14px 20px; display:flex; justify-content:space-between; align-items:center;">
         <div style="display:flex; align-items:center; gap:10px;">
           <span style="font-size: 20px;">🛡️</span>
           <div>
-            <h3 style="margin:0; font-size:16px; font-weight:700; color:#fff;" id="modalSelectApproverTitle">Submit Revision for Approval</h3>
-            <div style="font-size:11px; color:#94a3b8;" id="modalSelectApproverSubtitle">Choose an authorized Approver from the directory</div>
+            <h3 style="margin:0; font-size:16px; font-weight:700; color:#fff;" id="modalSelectApproverTitle">Submit
+              Revision for Approval</h3>
+            <div style="font-size:11px; color:#94a3b8;" id="modalSelectApproverSubtitle">Choose an authorized Approver
+              from the directory</div>
           </div>
         </div>
-        <span class="close-btn" style="color:#fff; font-size:24px; cursor:pointer;" onclick="closeModal('modalSelectRevisionApprover')">&times;</span>
+        <span class="close-btn" style="color:#fff; font-size:24px; cursor:pointer;"
+          onclick="closeModal('modalSelectRevisionApprover')">&times;</span>
       </div>
       <div class="modal-body" style="padding: 16px 20px; background: var(--bg-modal-body, #fff);">
-        <div id="modalSelectApproverNotice" style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; padding:10px 14px; margin-bottom:14px; font-size:12px; color:#166534; display:flex; align-items:center; gap:8px;">
+        <div id="modalSelectApproverNotice"
+          style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; padding:10px 14px; margin-bottom:14px; font-size:12px; color:#166534; display:flex; align-items:center; gap:8px;">
           <span style="font-size:16px;" id="modalSelectApproverNoticeIcon">✓</span>
-          <span id="modalSelectApproverNoticeText">Output Verification Checklist is <strong>100% Complete</strong>. Please designate an Approver for final sign-off.</span>
+          <span id="modalSelectApproverNoticeText">Output Verification Checklist is <strong>100% Complete</strong>.
+            Please designate an Approver for final sign-off.</span>
         </div>
 
         <div class="form-group" style="margin-bottom:14px; position:relative;">
@@ -9492,39 +9567,54 @@
           <div style="position:relative; width:100%;">
             <div style="position:relative; display:flex; align-items:center;">
               <span style="position:absolute; left:11px; font-size:13px; color:#64748b; pointer-events:none;">🔍</span>
-              <input type="text" id="approverSearchInput" placeholder="Type to search approver by name, role, plant or email..." oninput="filterApproverDirectoryList(this.value)" onfocus="showApproverDropdownMenu(true)" style="width:100%; padding:8px 30px 8px 32px; font-size:12px; border:1.5px solid #cbd5e1; border-radius:6px; background:var(--bg-input, #fff); color:var(--text-primary, #0f172a); transition:border-color 0.2s;" autocomplete="off">
-              <button type="button" id="btnToggleApproverDropdown" onclick="toggleApproverDropdownMenu(event)" style="position:absolute; right:4px; top:50%; transform:translateY(-50%); background:transparent; border:none; color:#64748b; cursor:pointer; padding:6px 8px; font-size:11px; display:flex; align-items:center;" title="Toggle dropdown list">
+              <input type="text" id="approverSearchInput"
+                placeholder="Type to search approver by name, role, plant or email..."
+                oninput="filterApproverDirectoryList(this.value)" onfocus="showApproverDropdownMenu(true)"
+                style="width:100%; padding:8px 30px 8px 32px; font-size:12px; border:1.5px solid #cbd5e1; border-radius:6px; background:var(--bg-input, #fff); color:var(--text-primary, #0f172a); transition:border-color 0.2s;"
+                autocomplete="off">
+              <button type="button" id="btnToggleApproverDropdown" onclick="toggleApproverDropdownMenu(event)"
+                style="position:absolute; right:4px; top:50%; transform:translateY(-50%); background:transparent; border:none; color:#64748b; cursor:pointer; padding:6px 8px; font-size:11px; display:flex; align-items:center;"
+                title="Toggle dropdown list">
                 <span>▼</span>
               </button>
             </div>
 
             <!-- Expandable Searchable Dropdown List -->
-            <div id="approverDirectoryListContainer" style="display:none; position:absolute; top:calc(100% + 4px); left:0; right:0; z-index:1050; max-height:220px; overflow-y:auto; border:1.5px solid #38bdf8; border-radius:6px; background:var(--bg-card, #ffffff); box-shadow:0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1); padding:4px;">
+            <div id="approverDirectoryListContainer"
+              style="display:none; position:absolute; top:calc(100% + 4px); left:0; right:0; z-index:1050; max-height:220px; overflow-y:auto; border:1.5px solid #38bdf8; border-radius:6px; background:var(--bg-card, #ffffff); box-shadow:0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1); padding:4px;">
               <!-- Populated dynamically with searchable dropdown items from systemUsers -->
             </div>
           </div>
 
           <!-- Selected Approver Display Card -->
-          <div id="selectedApproverSummaryCard" style="margin-top:8px; border-radius:6px; border:1.5px solid #cbd5e1; background:var(--bg-card, #f8fafc); padding:10px 14px; transition:all 0.2s;">
+          <div id="selectedApproverSummaryCard"
+            style="margin-top:8px; border-radius:6px; border:1.5px solid #cbd5e1; background:var(--bg-card, #f8fafc); padding:10px 14px; transition:all 0.2s;">
             <!-- Populated dynamically -->
           </div>
         </div>
 
         <div class="form-group" style="margin-bottom:14px;">
-          <label style="display:block; font-size:12px; font-weight:700; color:var(--text-primary, #1e293b); margin-bottom:6px;">
+          <label
+            style="display:block; font-size:12px; font-weight:700; color:var(--text-primary, #1e293b); margin-bottom:6px;">
             📝 Submission Remarks / Summary for Approver (Optional):
           </label>
-          <textarea id="submissionRemarksToApprover" rows="3" class="form-control" style="width:100%; padding:8px 10px; font-size:12px; border-radius:5px; border:1px solid #cbd5e1; resize:vertical; background:var(--bg-input, #fff); color:var(--text-primary, #0f172a);" placeholder="Explain reason for changes or key verification highlights..."></textarea>
+          <textarea id="submissionRemarksToApprover" rows="3" class="form-control"
+            style="width:100%; padding:8px 10px; font-size:12px; border-radius:5px; border:1px solid #cbd5e1; resize:vertical; background:var(--bg-input, #fff); color:var(--text-primary, #0f172a);"
+            placeholder="Explain reason for changes or key verification highlights..."></textarea>
         </div>
 
         <div style="display:flex; align-items:center; gap:8px; font-size:12px; color:#475569;">
           <input type="checkbox" id="chkCopyAdminOnApproval" checked style="cursor:pointer; width:16px; height:16px;">
-          <label for="chkCopyAdminOnApproval" style="cursor:pointer;">Send notification email to designated Approver and copy System Administrators</label>
+          <label for="chkCopyAdminOnApproval" style="cursor:pointer;">Send notification email to designated Approver and
+            copy System Administrators</label>
         </div>
       </div>
-      <div class="modal-footer" style="padding:12px 20px; background:var(--bg-modal-footer, #f1f5f9); border-top:1px solid #e2e8f0; display:flex; justify-content:flex-end; gap:10px;">
+      <div class="modal-footer"
+        style="padding:12px 20px; background:var(--bg-modal-footer, #f1f5f9); border-top:1px solid #e2e8f0; display:flex; justify-content:flex-end; gap:10px;">
         <button class="btn btn-secondary" onclick="closeModal('modalSelectRevisionApprover')">Cancel</button>
-        <button class="btn btn-primary" id="btnSubmitRevisionForApproval" style="font-weight:700; background:linear-gradient(135deg, #0284c7, #2563eb); border:none; padding:7px 18px;" onclick="submitRevisionForApproval()">
+        <button class="btn btn-primary" id="btnSubmitRevisionForApproval"
+          style="font-weight:700; background:linear-gradient(135deg, #0284c7, #2563eb); border:none; padding:7px 18px;"
+          onclick="submitRevisionForApproval()">
           🚀 Submit for Sign-off
         </button>
       </div>
@@ -9534,7 +9624,8 @@
   <!-- 25. Admin Revision Approval Settings Modal -->
   <div id="revisionApprovalSettingsModal" class="modal">
     <div class="modal-content" style="max-width: 600px; border-radius: 8px; overflow: hidden; padding: 0;">
-      <div class="modal-header" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #fff; padding: 14px 20px; display:flex; justify-content:space-between; align-items:center;">
+      <div class="modal-header"
+        style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #fff; padding: 14px 20px; display:flex; justify-content:space-between; align-items:center;">
         <div style="display:flex; align-items:center; gap:10px;">
           <span style="font-size: 20px;">⚙️</span>
           <div>
@@ -9542,52 +9633,71 @@
             <div style="font-size:11px; color:#94a3b8;">Admin Configuration for Revision Sign-off Workflow</div>
           </div>
         </div>
-        <span class="close-btn" style="color:#fff; font-size:24px; cursor:pointer;" onclick="closeModal('revisionApprovalSettingsModal')">&times;</span>
+        <span class="close-btn" style="color:#fff; font-size:24px; cursor:pointer;"
+          onclick="closeModal('revisionApprovalSettingsModal')">&times;</span>
       </div>
       <div class="modal-body" style="padding: 16px 20px; background: var(--bg-modal-body, #fff);">
-        
+
         <!-- Enable / Disable Toggle -->
-        <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:14px 16px; margin-bottom:16px;">
+        <div
+          style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:14px 16px; margin-bottom:16px;">
           <div style="display:flex; justify-content:space-between; align-items:center;">
             <div>
               <div style="font-weight:700; font-size:13px; color:#0f172a;">Enable Revision Approval Mechanism</div>
               <div style="font-size:11.5px; color:#64748b; margin-top:2px;">
-                When enabled, freezing requires designated Approver sign-off. When disabled, revisions freeze immediately upon 100% checklist completion.
+                When enabled, freezing requires designated Approver sign-off. When disabled, revisions freeze
+                immediately upon 100% checklist completion.
               </div>
             </div>
-            <label class="switch" style="position:relative; display:inline-block; width:48px; height:26px; margin-left:14px; flex-shrink:0;">
-              <input type="checkbox" id="adminSettingRevisionApprovalEnabled" onchange="toggleAdminApprovalSettingUI(this.checked)">
-              <span class="slider round" style="position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background-color:#cbd5e1; transition:.3s; border-radius:34px;"></span>
+            <label class="switch"
+              style="position:relative; display:inline-block; width:48px; height:26px; margin-left:14px; flex-shrink:0;">
+              <input type="checkbox" id="adminSettingRevisionApprovalEnabled"
+                onchange="toggleAdminApprovalSettingUI(this.checked)">
+              <span class="slider round"
+                style="position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background-color:#cbd5e1; transition:.3s; border-radius:34px;"></span>
             </label>
           </div>
         </div>
 
         <div id="adminApprovalConfigFieldsContainer">
           <div class="form-group" style="margin-bottom:12px;">
-            <label style="display:block; font-size:12px; font-weight:700; color:#334155; margin-bottom:4px;">Desktop Protocol Scheme (Electron Deep-Link):</label>
-            <input type="text" id="adminSettingDesktopProtocol" value="jost-fmea://" class="form-control" style="width:100%; padding:6px 10px; font-size:12px; border:1px solid #cbd5e1; border-radius:5px;">
-            <div style="font-size:10.5px; color:#64748b; margin-top:2px;">Custom URI protocol registered in Windows for desktop client.</div>
+            <label style="display:block; font-size:12px; font-weight:700; color:#334155; margin-bottom:4px;">Desktop
+              Protocol Scheme (Electron Deep-Link):</label>
+            <input type="text" id="adminSettingDesktopProtocol" value="jost-fmea://" class="form-control"
+              style="width:100%; padding:6px 10px; font-size:12px; border:1px solid #cbd5e1; border-radius:5px;">
+            <div style="font-size:10.5px; color:#64748b; margin-top:2px;">Custom URI protocol registered in Windows for
+              desktop client.</div>
           </div>
 
           <div class="form-group" style="margin-bottom:12px;">
-            <label style="display:block; font-size:12px; font-weight:700; color:#334155; margin-bottom:4px;">Web Application Base URL (Intranet / Localhost):</label>
-            <input type="text" id="adminSettingWebBaseUrl" class="form-control" style="width:100%; padding:6px 10px; font-size:12px; border:1px solid #cbd5e1; border-radius:5px;" placeholder="http://localhost:3030">
-            <div style="font-size:10.5px; color:#64748b; margin-top:2px;">URL included in notification emails for web browser access.</div>
+            <label style="display:block; font-size:12px; font-weight:700; color:#334155; margin-bottom:4px;">Web
+              Application Base URL (Intranet / Localhost):</label>
+            <input type="text" id="adminSettingWebBaseUrl" class="form-control"
+              style="width:100%; padding:6px 10px; font-size:12px; border:1px solid #cbd5e1; border-radius:5px;"
+              placeholder="http://localhost:3030">
+            <div style="font-size:10.5px; color:#64748b; margin-top:2px;">URL included in notification emails for web
+              browser access.</div>
           </div>
 
           <div class="form-group" style="margin-bottom:12px;">
-            <label style="display:block; font-size:12px; font-weight:700; color:#334155; margin-bottom:4px;">Admin Notification Email(s) (Comma-separated):</label>
-            <input type="text" id="adminSettingAdminEmails" class="form-control" style="width:100%; padding:6px 10px; font-size:12px; border:1px solid #cbd5e1; border-radius:5px;" placeholder="admin.fmea@jost-world.com">
-            <div style="font-size:10.5px; color:#64748b; margin-top:2px;">Admins will be copied on all approval requests and fallback notifications.</div>
+            <label style="display:block; font-size:12px; font-weight:700; color:#334155; margin-bottom:4px;">Admin
+              Notification Email(s) (Comma-separated):</label>
+            <input type="text" id="adminSettingAdminEmails" class="form-control"
+              style="width:100%; padding:6px 10px; font-size:12px; border:1px solid #cbd5e1; border-radius:5px;"
+              placeholder="admin.fmea@jost-world.com">
+            <div style="font-size:10.5px; color:#64748b; margin-top:2px;">Admins will be copied on all approval requests
+              and fallback notifications.</div>
           </div>
         </div>
 
       </div>
-      <div class="modal-footer" style="padding:12px 20px; background:var(--bg-modal-footer, #f1f5f9); border-top:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center;">
+      <div class="modal-footer"
+        style="padding:12px 20px; background:var(--bg-modal-footer, #f1f5f9); border-top:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center;">
         <button class="btn btn-outline" onclick="resetRevisionApprovalSettingsToDefaults()">Reset Defaults</button>
         <div style="display:flex; gap:10px;">
           <button class="btn btn-secondary" onclick="closeModal('revisionApprovalSettingsModal')">Cancel</button>
-          <button class="btn btn-success" style="font-weight:700;" onclick="saveRevisionApprovalSettings()">💾 Save Settings</button>
+          <button class="btn btn-success" style="font-weight:700;" onclick="saveRevisionApprovalSettings()">💾 Save
+            Settings</button>
         </div>
       </div>
     </div>
@@ -9595,24 +9705,34 @@
 
   <!-- 26. Shared Approval Logs & Audit Trail Modal -->
   <div id="sharedApprovalLogsAuditModal" class="modal">
-    <div class="modal-content large" style="max-width: 1200px; max-height: 85vh; display:flex; flex-direction:column; padding:0; border-radius:8px; overflow:hidden;">
-      <div class="modal-header" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #fff; padding: 14px 20px; display:flex; justify-content:space-between; align-items:center;">
+    <div class="modal-content large"
+      style="max-width: 1200px; max-height: 85vh; display:flex; flex-direction:column; padding:0; border-radius:8px; overflow:hidden;">
+      <div class="modal-header"
+        style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #fff; padding: 14px 20px; display:flex; justify-content:space-between; align-items:center;">
         <div style="display:flex; align-items:center; gap:10px;">
           <span style="font-size: 20px;">📜</span>
           <div>
-            <h3 style="margin:0; font-size:16px; font-weight:700; color:#fff;">Centralized Revision Approval &amp; Audit Logs</h3>
-            <div style="font-size:11px; color:#94a3b8;">Shared audit trail of all revision freeze requests, sign-offs, and rejections</div>
+            <h3 style="margin:0; font-size:16px; font-weight:700; color:#fff;">Centralized Revision Approval &amp; Audit
+              Logs</h3>
+            <div style="font-size:11px; color:#94a3b8;">Shared audit trail of all revision freeze requests, sign-offs,
+              and rejections</div>
           </div>
         </div>
         <div style="display:flex; align-items:center; gap:10px;">
-          <button class="btn btn-sm btn-outline" style="color:#fff; border-color:#475569;" onclick="exportApprovalLogsToCSV()">📥 Export CSV</button>
-          <span class="close-btn" style="color:#fff; font-size:24px; cursor:pointer;" onclick="closeModal('sharedApprovalLogsAuditModal')">&times;</span>
+          <button class="btn btn-sm btn-outline" style="color:#fff; border-color:#475569;"
+            onclick="exportApprovalLogsToCSV()">📥 Export CSV</button>
+          <span class="close-btn" style="color:#fff; font-size:24px; cursor:pointer;"
+            onclick="closeModal('sharedApprovalLogsAuditModal')">&times;</span>
         </div>
       </div>
-      <div style="padding:10px 16px; background:#f1f5f9; border-bottom:1px solid #cbd5e1; display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+      <div
+        style="padding:10px 16px; background:#f1f5f9; border-bottom:1px solid #cbd5e1; display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
         <div style="display:flex; gap:8px; align-items:center;">
-          <input type="text" id="approvalLogSearchInput" placeholder="🔍 Filter logs by FMEA, Rev, User, Status..." oninput="renderSharedApprovalLogsTable()" style="padding:5px 10px; font-size:12px; border:1px solid #cbd5e1; border-radius:4px; width:260px;">
-          <select id="approvalLogStatusFilter" onchange="renderSharedApprovalLogsTable()" style="padding:5px 8px; font-size:12px; border:1px solid #cbd5e1; border-radius:4px;">
+          <input type="text" id="approvalLogSearchInput" placeholder="🔍 Filter logs by FMEA, Rev, User, Status..."
+            oninput="renderSharedApprovalLogsTable()"
+            style="padding:5px 10px; font-size:12px; border:1px solid #cbd5e1; border-radius:4px; width:260px;">
+          <select id="approvalLogStatusFilter" onchange="renderSharedApprovalLogsTable()"
+            style="padding:5px 8px; font-size:12px; border:1px solid #cbd5e1; border-radius:4px;">
             <option value="ALL">All Statuses</option>
             <option value="Pending">Pending Approval</option>
             <option value="Approved">Approved / Frozen</option>
@@ -9641,7 +9761,8 @@
           </tbody>
         </table>
       </div>
-      <div class="modal-footer" style="padding:10px 20px; background:#f8fafc; border-top:1px solid #e2e8f0; display:flex; justify-content:flex-end;">
+      <div class="modal-footer"
+        style="padding:10px 20px; background:#f8fafc; border-top:1px solid #e2e8f0; display:flex; justify-content:flex-end;">
         <button class="btn btn-secondary" onclick="closeModal('sharedApprovalLogsAuditModal')">Close</button>
       </div>
     </div>
@@ -10096,7 +10217,10 @@
             style="font-size: 11px; font-weight:600; padding:4px 10px; transition:all 0.15s ease;"
             onclick="handleBoundaryAddLinkageClick()">🔗 Add Linkage</button>
           <button type="button" class="btn btn-sm btn-secondary" style="font-size: 11px; padding:4px 10px;"
-            onclick="exportBoundaryDiagramPNG()">📥 Export Image</button>
+            onclick="exportBoundaryDiagramPNG()" title="Export high-resolution PNG image">📸 Export PNG</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary"
+            style="font-size: 11px; padding:4px 10px; color:#94a3b8; border-color:#475569;"
+            onclick="exportBoundaryDiagramPDF()" title="Export / Print printable PDF">📄 Export PDF</button>
           <span class="close-btn" onclick="closeModal('boundaryDiagramModal')"
             style="color: #94a3b8; font-size: 24px; cursor: pointer; margin-left:8px;">&times;</span>
         </div>
@@ -10139,7 +10263,7 @@
 
           <!-- Floating Multi-Selection Action Bar -->
           <div id="boundaryMultiSelectBar"
-            style="display:none; position:sticky; top:12px; left:50%; transform:translateX(-50%); z-index:90; background:#0f172a; border:2px solid #38bdf8; border-radius:30px; padding:6px 18px; box-shadow:0 8px 25px rgba(0,0,0,0.7); align-items:center; gap:12px; color:#f8fafc; font-size:12px; width:max-content; margin:0 auto;">
+            style="display:none; position:absolute; top:16px; left:50%; transform:translateX(-50%); z-index:100; background:#0f172a; border:2px solid #38bdf8; border-radius:30px; padding:6px 18px; box-shadow:0 8px 25px rgba(0,0,0,0.7); align-items:center; gap:12px; color:#f8fafc; font-size:12px; width:max-content; margin:0 auto; pointer-events:auto;">
             <span style="font-weight:700; color:#38bdf8;" id="boundarySelectBarText">⚡ 2 Elements Selected</span>
             <button type="button" class="btn btn-sm btn-primary"
               style="font-size:11px; font-weight:700; padding:4px 14px; border-radius:20px; background:#0284c7; border:none; cursor:pointer;"
@@ -10162,7 +10286,7 @@
 
           <!-- Nodes Container -->
           <div id="boundaryNodesContainer"
-            style="position: relative; width: 100%; height: 100%; min-width: 1200px; min-height: 800px; z-index: 2;">
+            style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; min-width: 1400px; min-height: 900px; z-index: 2;">
           </div>
 
           <!-- Floating Interface Legend Panel -->
